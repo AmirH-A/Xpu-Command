@@ -55,7 +55,7 @@ mouse button (held) ─► microphone ─► speech-to-text ─► ┬─ Mode A
   - Every action is in **Settings › Activity**. Debug: `xpu-command --selftest-mac "open calculator"`.
 - **Two triggers:** a mouse button, or a keyboard shortcut (default **⌃⌥Space**) for trackpads. Hold, speak, release.
 - **Listening:** after a click (toggle mode) or a double knock it sends when you stop talking (1.5 s of quiet) and cancels if you say nothing. Silence is trimmed before transcription, the stop knock is cut off, and Whisper's phantom phrases ("Thank you.") are dropped. Soft sound cues mark start, send and cancel.
-- **AirPods:** choose single, double or triple press to talk (Settings › Talk button). The other presses still control Spotify or Music.
+- **AirPods:** press once to talk (Settings › Talk button › Press AirPods to talk). Double and triple press still skip tracks in Spotify or Music.
 - **Double knock (experimental, MacBooks with Apple silicon):** knock twice on the palm rest to start; stop talking or knock again to send. Taps within 1.2 s of typing, clicking or scrolling are ignored. Off by default. Calibrate with `src-tauri/target/debug/xpu-command --selftest-knock [low|medium|high|<g>]`.
 
 ## Run it (development)

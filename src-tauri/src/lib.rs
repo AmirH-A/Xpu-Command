@@ -156,7 +156,7 @@ pub fn run() {
                     }
                 })?;
             }
-            airpods::apply(app.handle(), ctl.settings.read().airpods_press);
+            airpods::apply(app.handle(), ctl.settings.read().airpods);
             if ctl.settings.read().knock {
                 knock_start(app.handle(), &ctl);
             }

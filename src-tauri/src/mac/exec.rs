@@ -227,7 +227,6 @@ fn spotify_search(query: &str) -> String {
 
 pub fn music_key(key: crate::airpods::MusicKey) -> Result<String, String> {
     let action = match key {
-        crate::airpods::MusicKey::PlayPause => "playpause",
         crate::airpods::MusicKey::Next => "next",
         crate::airpods::MusicKey::Previous => "previous",
     };

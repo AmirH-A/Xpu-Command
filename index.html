@@ -39,15 +39,8 @@
           <option value="toggle">Click to start, click to send</option>
         </select></label>
       </div>
-      <div class="row">
-        <label>AirPods<select id="airpods_press">
-          <option value="">Off</option>
-          <option value="triple">Triple-press to talk</option>
-          <option value="double">Double-press to talk</option>
-          <option value="single">Press to talk</option>
-        </select></label>
-      </div>
-      <p class="note" id="airpods-note">Press your AirPods (or any headphones with a play button) to start, then stop talking or press again to send. Your other presses still play, pause and skip music in Spotify or Music. While this is on, Control Center shows Xpu Command as playing.</p>
+      <label class="check"><input type="checkbox" id="airpods" /> Press AirPods to talk</label>
+      <p class="note" id="airpods-note">Press your AirPods (or any headphones with a play button) to start, then stop talking or press again to send. Double and triple press still skip tracks in Spotify or Music. While this is on, Control Center shows Xpu Command as playing.</p>
       <label class="check"><input type="checkbox" id="auto_stop" /> Send when I stop talking <small>(after a click or a double knock)</small></label>
       <label class="check"><input type="checkbox" id="sound_cues" /> Sound cues when listening starts and when it's sent</label>
       <p class="note">Use the mouse button or the shortcut, whichever is handy: hold, speak, release. On a trackpad, use the shortcut.</p>

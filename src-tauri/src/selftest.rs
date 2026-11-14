@@ -102,13 +102,8 @@ pub fn maybe_run() -> bool {
         }
         #[cfg(target_os = "macos")]
         Some("--selftest-airpods") => {
-            let g = match args.get(2).map(String::as_str) {
-                Some("single") => crate::airpods::Press::Single,
-                Some("double") => crate::airpods::Press::Double,
-                _ => crate::airpods::Press::Triple,
-            };
-            println!("listening for 10 s, gesture {g:?}");
-            for e in crate::airpods::listen_for(g, 10) {
+            println!("listening for 10 s: press your AirPods");
+            for e in crate::airpods::listen_for(10) {
                 println!("EVENT {e:?}");
             }
             true

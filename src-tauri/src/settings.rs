@@ -91,7 +91,9 @@ pub struct Settings {
     pub auto_stop: bool,
     /// Soft sounds when listening starts, is sent, or is cancelled.
     pub sound_cues: bool,
-    pub airpods_press: Option<crate::airpods::Press>,
+    /// Press AirPods (or any headset play button) to talk.
+    #[serde(alias = "airpods_press", deserialize_with = "airpods_on")]
+    pub airpods: bool,
     /// After an agent's answer is read aloud, listen briefly for a reply that continues it.
     pub conversation: bool,
     pub stt: SttEngine,
@@ -130,7 +132,7 @@ impl Default for Settings {
             knock_sensitivity: KnockSensitivity::Medium,
             auto_stop: true,
             sound_cues: true,
-            airpods_press: None,
+            airpods: false,
             conversation: true,
             stt: SttEngine::Local,
             local_model: "base.en".into(),
@@ -252,6 +254,20 @@ pub fn first_run() -> bool {
     file().map(|f| !f.exists()).unwrap_or(true)
 }
 
+/// Accepts the old `airpods_press` value ("single", "double", "triple" or null) as on or off.
+fn airpods_on<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<bool, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Value {
+        On(bool),
+        Gesture(Option<String>),
+    }
+    Ok(match Value::deserialize(d)? {
+        Value::On(on) => on,
+        Value::Gesture(g) => g.is_some(),
+    })
+}
+
 pub fn load() -> Settings {
     let read = || -> Result<Settings> {
         let s: Settings = serde_json::from_str(&std::fs::read_to_string(file()?)?)?;
@@ -296,6 +312,16 @@ mod tests {
         assert!(!s.auto_submit, "never press Enter by default");
         assert_eq!(s.safety, Safety::AskCommands, "commands need the user's yes by default");
         s.validate().unwrap();
+    }
+
+    #[test]
+    fn old_airpods_gesture_turns_airpods_on() {
+        let on: Settings = serde_json::from_str(r#"{"airpods_press":"triple"}"#).unwrap();
+        assert!(on.airpods);
+        let off: Settings = serde_json::from_str(r#"{"airpods_press":null}"#).unwrap();
+        assert!(!off.airpods);
+        let new: Settings = serde_json::from_str(r#"{"airpods":true}"#).unwrap();
+        assert!(new.airpods);
     }
 
     #[test]
