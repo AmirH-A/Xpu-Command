@@ -5,6 +5,25 @@ a side button on any mouse, speak, release. Your words are transcribed on your c
 where your cursor is, or handed to **Claude Code** or **Codex** to work on your project, with live status
 and a spoken summary in your headset when it's done.
 
+## Download
+
+**[Download Xpu Command for macOS (Apple silicon)](https://github.com/AmirH-A/Xpu-Command/releases/latest)**: open the latest release and get the `.dmg` file under *Assets*.
+
+| | |
+|---|---|
+| Version | 0.1.0 |
+| Requires | macOS 12 or later, a Mac with Apple silicon (M1 or newer) |
+| File | `Xpu-Command-0.1.0-arm64.dmg` (4.8 MB) |
+| SHA-256 | `833018edf77fef96b91ddcdbb0cf65574385e985be51a80e4de5c6dfcbe23d36` |
+
+**Install**
+1. Open the `.dmg` and drag **Xpu Command** to **Applications**.
+2. The app is not notarized by Apple yet, so the first time, **right-click the app → Open → Open**. If macOS says the app is damaged, run `xattr -dr com.apple.quarantine "/Applications/Xpu Command.app"` in Terminal.
+3. Allow **Microphone** and **Accessibility** when asked. Xpu Command lives in the menu bar.
+4. In **Settings › Speech to text**, download a speech model (148 MB, one time).
+
+Agent features need [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://github.com/openai/codex) installed and signed in. To check your download: `shasum -a 256 Xpu-Command-0.1.0-arm64.dmg`.
+
 ## How it works
 
 ```
