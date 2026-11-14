@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 type Settings = {
-  button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
+  button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; airpods_press: 'single' | 'double' | 'triple' | null; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
   delivery: 'type_into_focused' | 'agent' | 'control_mac'; agent: 'claude' | 'codex'; project_dir: string | null; safety: 'read_only' | 'edit' | 'ask_commands'; conversation: boolean;
   speak_summary: boolean; auto_submit: boolean; max_record_seconds: number; input_device: string | null; claude_profile: string | null; mac_model: 'haiku' | 'sonnet'; app_access: Record<string, Access>; allow_all_apps: boolean; step_by_step: boolean;
 };
@@ -48,6 +48,7 @@ function render() {
   $('claude-box').hidden = s.delivery === 'type_into_focused';
   $('profile-row').hidden = s.delivery === 'agent' && s.agent !== 'claude';
   $('knock-row').hidden = !s.knock;
+  $('airpods-note').hidden = !s.airpods_press;
   $('ask-note').hidden = s.safety !== 'ask_commands';
   $('access-card').hidden = s.delivery !== 'control_mac';
   $('allow-all-warn').hidden = !s.allow_all_apps;
@@ -208,6 +209,9 @@ async function init() {
   await refreshModels();
   await refreshDevices();
   await refreshProfiles();
+  const ap = $<HTMLSelectElement>('airpods_press');
+  ap.value = s.airpods_press ?? '';
+  ap.onchange = () => { s.airpods_press = (ap.value || null) as Settings['airpods_press']; render(); };
   const hk = $<HTMLSelectElement>('hotkey');
   hk.value = s.hotkey ?? '';
   hk.onchange = () => { s.hotkey = (hk.value || null) as Settings['hotkey']; };

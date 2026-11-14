@@ -26,6 +26,9 @@ pub fn save_settings(app: AppHandle, ctl: Ctl, new: Settings) -> Result<Settings
     if new.hotkey != ctl.settings.read().hotkey {
         crate::hotkey::apply(&app, new.hotkey)?;
     }
+    if new.airpods_press != ctl.settings.read().airpods_press {
+        crate::airpods::apply(&app, new.airpods_press);
+    }
     ctl.hook.set_button(new.button);
     ctl.knock.set_sensitivity(new.knock_sensitivity);
     ctl.knock.enabled.store(new.knock, std::sync::atomic::Ordering::Relaxed);

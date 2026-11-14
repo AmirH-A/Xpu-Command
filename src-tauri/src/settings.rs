@@ -91,6 +91,7 @@ pub struct Settings {
     pub auto_stop: bool,
     /// Soft sounds when listening starts, is sent, or is cancelled.
     pub sound_cues: bool,
+    pub airpods_press: Option<crate::airpods::Press>,
     /// After an agent's answer is read aloud, listen briefly for a reply that continues it.
     pub conversation: bool,
     pub stt: SttEngine,
@@ -129,6 +130,7 @@ impl Default for Settings {
             knock_sensitivity: KnockSensitivity::Medium,
             auto_stop: true,
             sound_cues: true,
+            airpods_press: None,
             conversation: true,
             stt: SttEngine::Local,
             local_model: "base.en".into(),

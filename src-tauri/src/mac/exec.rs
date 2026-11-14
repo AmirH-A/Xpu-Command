@@ -225,6 +225,26 @@ fn spotify_search(query: &str) -> String {
     format!("spotify:search:{}", percent_encoding::utf8_percent_encode(query, percent_encoding::NON_ALPHANUMERIC))
 }
 
+pub fn music_key(key: crate::airpods::MusicKey) -> Result<String, String> {
+    let action = match key {
+        crate::airpods::MusicKey::PlayPause => "playpause",
+        crate::airpods::MusicKey::Next => "next",
+        crate::airpods::MusicKey::Previous => "previous",
+    };
+    let (script, app) = if is_running("Spotify") {
+        (MEDIA_SPOTIFY, "Spotify")
+    } else if is_running("Music") {
+        (MEDIA_MUSIC, "Music")
+    } else {
+        return Err("no music app is running".into());
+    };
+    osascript(script, &[action], app)
+}
+
+fn is_running(process: &str) -> bool {
+    run_program("/usr/bin/pgrep", &["-xq".as_ref(), process.as_ref()], Duration::from_secs(5)).is_ok()
+}
+
 fn pick_player(p: Option<Player>) -> Result<Player, String> {
     if let Some(p) = p {
         return Ok(p);
@@ -319,6 +339,8 @@ const MEDIA_MUSIC: &str = r#"on run argv
   tell application "Music"
     if a is "play" then
       play
+    else if a is "playpause" then
+      playpause
     else if a is "pause" then
       pause
     else if a is "next" then
@@ -339,6 +361,8 @@ const MEDIA_SPOTIFY: &str = r#"on run argv
   tell application "Spotify"
     if a is "play" then
       play
+    else if a is "playpause" then
+      playpause
     else if a is "pause" then
       pause
     else if a is "next" then

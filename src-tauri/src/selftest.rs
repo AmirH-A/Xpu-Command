@@ -100,6 +100,19 @@ pub fn maybe_run() -> bool {
             println!("trim keeps {:.2}s..{:.2}s of {:.2}s", r.start as f32 / 16000.0, r.end as f32 / 16000.0, samples.len() as f32 / 16000.0);
             true
         }
+        #[cfg(target_os = "macos")]
+        Some("--selftest-airpods") => {
+            let g = match args.get(2).map(String::as_str) {
+                Some("single") => crate::airpods::Press::Single,
+                Some("double") => crate::airpods::Press::Double,
+                _ => crate::airpods::Press::Triple,
+            };
+            println!("listening for 10 s, gesture {g:?}");
+            for e in crate::airpods::listen_for(g, 10) {
+                println!("EVENT {e:?}");
+            }
+            true
+        }
         Some("--selftest-knock") => {
             let sens = match args.get(2).map(String::as_str) {
                 Some("low") => settings::KnockSensitivity::Low,

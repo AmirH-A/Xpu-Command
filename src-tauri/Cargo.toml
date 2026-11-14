@@ -54,6 +54,9 @@ core-graphics = { version = "0.24", features = ["elcapitan", "highsierra"] }
 foreign-types = "0.5"
 core-foundation = "0.10"
 objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSDictionary", "NSObject"] }
+objc2-media-player = { version = "0.3", default-features = false, features = ["std", "block2", "MPRemoteCommandCenter", "MPRemoteCommand", "MPRemoteCommandEvent", "MPNowPlayingInfoCenter", "MPMediaItem"] }
+block2 = "0.6"
 whisper-rs = { version = "0.15", features = ["metal", "log_backend"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

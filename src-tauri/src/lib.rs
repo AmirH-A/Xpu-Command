@@ -1,6 +1,7 @@
 //! Xpu Command: hold a mouse button, talk to your AI coding agent.
 mod activity;
 mod agents;
+mod airpods;
 mod audio;
 mod commands;
 mod controller;
@@ -136,6 +137,26 @@ pub fn run() {
                 });
             }
 
+            #[cfg(target_os = "macos")]
+            {
+                let (tx, rx) = std::sync::mpsc::channel();
+                airpods::init(tx);
+                let (handle, c) = (app.handle().clone(), ctl.clone());
+                std::thread::Builder::new().name("xpu-headset".into()).spawn(move || {
+                    for ev in rx {
+                        match ev {
+                            airpods::Event::Talk => c.on_headset(&handle),
+                            airpods::Event::Music(key) => {
+                                if let Err(e) = mac::exec::music_key(key) {
+                                    log::info!("AirPods press: {e}");
+                                }
+                                airpods::reclaim_soon(&handle);
+                            }
+                        }
+                    }
+                })?;
+            }
+            airpods::apply(app.handle(), ctl.settings.read().airpods_press);
             if ctl.settings.read().knock {
                 knock_start(app.handle(), &ctl);
             }

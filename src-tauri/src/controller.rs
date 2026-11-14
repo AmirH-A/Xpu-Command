@@ -26,6 +26,7 @@ enum Trigger {
     Click,
     /// A double knock: ends on the next double knock, or when the user stops talking.
     Knock,
+    Headset,
     /// Opened by the app after an agent's answer: ends when the user stops talking; silence
     /// closes it quietly.
     Reply,
@@ -346,6 +347,18 @@ impl Controller {
         }
     }
 
+    pub fn on_headset(self: &Arc<Self>, app: &AppHandle) {
+        if !self.hook.enabled.load(std::sync::atomic::Ordering::Relaxed) || self.answer_pending() {
+            return;
+        }
+        let recording = self.recording.lock().is_some();
+        match decide(TalkMode::Toggle, ButtonEvent::Pressed, recording) {
+            Action::Start => self.start_recording(app, Trigger::Headset),
+            Action::Stop => self.stop_recording(app, 0),
+            Action::Nothing => {}
+        }
+    }
+
     /// Loads the speech model in the background so the first talk isn't slowed by it.
     pub fn preload(self: &Arc<Self>) {
         let s = self.settings.read().clone();
@@ -406,6 +419,8 @@ impl Controller {
                     (Trigger::Click, false) => "Listening… click to send",
                     (Trigger::Knock, true) => "Listening… pause or knock to send",
                     (Trigger::Knock, false) => "Listening… knock twice to send",
+                    (Trigger::Headset, true) => "Listening… pause or press your AirPods to send",
+                    (Trigger::Headset, false) => "Listening… press your AirPods to send",
                 };
                 self.overlay(app, Phase::Listening, hint, None);
             }
