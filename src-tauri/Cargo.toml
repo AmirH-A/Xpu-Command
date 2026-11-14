@@ -1,0 +1,77 @@
+[package]
+name = "xpu-command"
+version = "0.1.0"
+description = "Hold a mouse button, talk to your AI coding agent."
+edition = "2021"
+rust-version = "1.80"
+license = "UNLICENSED"
+
+[lib]
+name = "xpu_command_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "xpu-command"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+log = "0.4"
+env_logger = "0.11"
+tokio = { version = "1", features = ["process", "io-util", "rt-multi-thread", "macros", "sync", "time"] }
+cpal = "0.16"
+rubato = "0.16"
+whisper-rs = { version = "0.15", features = ["log_backend"] }
+enigo = "0.5"
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
+sha2 = "0.10"
+hex = "0.4"
+zeroize = "1"
+dirs = "6"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+percent-encoding = "2"
+base64 = "0.22"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart", "stream"] }
+futures-util = "0.3"
+tts = "0.26"
+parking_lot = "0.12"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = { version = "0.24", features = ["elcapitan", "highsierra"] }
+foreign-types = "0.5"
+core-foundation = "0.10"
+objc2 = "0.6"
+whisper-rs = { version = "0.15", features = ["metal", "log_backend"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_System_Threading"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
+
+# Build-time tools (proc macros, build scripts) must not be stripped: on recent macOS a stripped
+# proc-macro dylib fails to load ("mis-aligned LINKEDIT string pool"). Only the app is stripped.
+[profile.release.build-override]
+strip = false
+debug = false
+
+# Dependencies (whisper.cpp, sha2, resampler) optimized even in dev builds: talk latency stays realistic.
+[profile.dev.package."*"]
+opt-level = 3

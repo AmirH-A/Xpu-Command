@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Xpu Command records your voice only while you hold the talk button, and turns it into text for your AI agent.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Xpu Command controls this app only when you ask it to by voice in "Control my Mac" mode, for example to create a reminder or play music.</string>
+  <key>LSUIElement</key>
+  <true/>
+</dict>
+</plist>

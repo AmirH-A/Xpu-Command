@@ -1,0 +1,5 @@
+# One macOS deployment target for Rust *and* the C/C++ dependencies (whisper.cpp, ring), matching
+# bundle.macOS.minimumSystemVersion. Without it, C code targets the build machine's macOS and the
+# release link fails (___isPlatformVersionAtLeast) or the app wouldn't run on older systems.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "12.0"

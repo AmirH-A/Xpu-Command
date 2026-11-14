@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "overlay-capability",
+  "description": "Overlay: it only listens to status events. It can call no commands.",
+  "windows": ["overlay"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

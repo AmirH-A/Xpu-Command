@@ -1,0 +1,89 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Xpu Command",
+  "version": "0.1.0",
+  "identifier": "app.xpucommand.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Xpu Command",
+        "url": "index.html",
+        "width": 760,
+        "height": 640,
+        "resizable": true,
+        "visible": false
+      },
+      {
+        "label": "overlay",
+        "title": "Xpu Command overlay",
+        "url": "overlay.html",
+        "width": 420,
+        "height": 132,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "focus": false,
+        "visible": false,
+        "shadow": false
+      },
+      {
+        "label": "frame",
+        "title": "Xpu Command frame",
+        "url": "frame.html",
+        "width": 400,
+        "height": 300,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "focus": false,
+        "visible": false,
+        "shadow": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+      "freezePrototype": true,
+      "capabilities": [
+        "main-capability",
+        "overlay-capability"
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "entitlements": "entitlements.plist",
+      "hardenedRuntime": true,
+      "signingIdentity": "-"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    }
+  }
+}

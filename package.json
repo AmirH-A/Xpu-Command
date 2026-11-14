@@ -1,0 +1,25 @@
+{
+  "name": "xpu-command",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Hold a mouse button, talk to your AI coding agent.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "tauri": "tauri",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4",
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vite": "6.4.6"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.4"
+  }
+}
