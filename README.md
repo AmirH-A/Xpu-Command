@@ -18,9 +18,18 @@ and a spoken summary in your headset when it's done.
 
 **Install**
 1. Open the `.dmg` and drag **Xpu Command** to **Applications**.
-2. The app is not notarized by Apple yet, so the first time, **right-click the app → Open → Open**. If macOS says the app is damaged, run `xattr -dr com.apple.quarantine "/Applications/Xpu Command.app"` in Terminal.
+2. Open **Xpu Command** from Applications.
 3. Allow **Microphone** and **Accessibility** when asked. Xpu Command lives in the menu bar.
 4. In **Settings › Speech to text**, download a speech model (148 MB, one time).
+
+**"Apple could not verify Xpu Command is free of malware"**
+
+This build is not notarized by Apple yet, so macOS asks once. To open it:
+1. Click **Done** on the message (don't move the app to the Bin).
+2. Open **System Settings › Privacy & Security** and scroll down to *"Xpu Command" was blocked to protect your Mac*.
+3. Click **Open Anyway**, enter your password, and click **Open Anyway** again.
+
+You only do this once per version. If you prefer Terminal: `xattr -dr com.apple.quarantine "/Applications/Xpu Command.app"`, then open the app normally.
 
 Agent features need [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://github.com/openai/codex) installed and signed in. To check your download: `shasum -a 256 Xpu-Command-0.1.0-arm64.dmg`.
 
@@ -75,7 +84,22 @@ XPU_RESUME=<session id> ./target/debug/xpu-command --selftest-agent claude /path
 XPU_OVERLAY_DEMO=1 ./target/debug/xpu-command   # cycles the overlay; the frontmost app must not change
 ```
 
-Release build: `npx tauri build` (signing and notarization: see `docs/RELEASE.md`, to do).
+Release build: see [Releasing](#releasing-macos).
+
+## Releasing (macOS)
+
+```
+scripts/release-macos.sh
+```
+Builds the app and a DMG (`src-tauri/target/release/bundle/dmg/`) and prints its SHA-256. Upload it to a GitHub release.
+
+Without Apple credentials the app is ad-hoc signed, and users see the "Apple could not verify" message once (see [Download](#download)). With an Apple Developer account, set these and run the same script: the app and DMG are signed with your Developer ID and notarized, so they open without any warning.
+```
+export APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+export APPLE_ID="you@example.com"          # your Apple Account
+export APPLE_PASSWORD="xxxx-xxxx-xxxx-xxxx" # an app-specific password from account.apple.com
+export APPLE_TEAM_ID="TEAMID"
+```
 
 ## Layout
 
