@@ -1,0 +1,539 @@
+//! Runs validated calls on macOS. Only three programs are ever started, each by absolute path and
+//! without a shell: /usr/bin/open, /usr/bin/osascript and /usr/bin/shortcuts.
+//! AppleScripts are constants. Values from the model are passed as arguments after "--" and read
+//! with `item n of argv`, so no value can ever become script code.
+use super::apps;
+use super::policy::{Access, Policy, Target};
+use super::server::{Exec, Output};
+use super::tools::{Call, MediaAction, Player};
+use super::ui;
+use chrono::{Datelike, NaiveDateTime, Timelike};
+use std::io::Read;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
+
+/// Runs calls for one request: its own numbered controls and screenshots, and a snapshot of the
+/// user's App access settings (to list windows with their access level).
+pub struct MacExec {
+    session: ui::Session,
+    policy: Policy,
+    shots_dir: std::path::PathBuf,
+}
+
+impl MacExec {
+    pub fn new(policy: Policy, shots_dir: std::path::PathBuf) -> Self {
+        Self { session: ui::Session::default(), policy, shots_dir }
+    }
+
+    /// For window calls: the app named in the call, checked to be the same process the gate saw.
+    fn same_app(&self, name: &str, t: Option<&Target>) -> Result<ui::RunningApp, String> {
+        let app = ui::find_app(name)?;
+        match t {
+            Some(t) if t.pid == app.pid && t.bundle == app.bundle => Ok(app),
+            _ => Err(format!("{name} changed while waiting; try again")),
+        }
+    }
+
+    fn list_windows(&self) -> String {
+        let mut lines = Vec::new();
+        for a in ui::apps_on_screen().into_iter().take(40) {
+            let level = match super::policy::class(&a.bundle) {
+                super::policy::Class::Excluded => "never accessible".to_string(),
+                _ => format!("{:?}", self.policy.level(&a.bundle)).to_lowercase(),
+            };
+            let title = if self.policy.level(&a.bundle) >= Access::See {
+                ui::window_title(a.pid).map(|t| format!(" — “{}”", crate::agents::clip(&t, 80))).unwrap_or_default()
+            } else {
+                String::new()
+            };
+            lines.push(format!("{} ({level}){title}", a.name));
+        }
+        if lines.is_empty() {
+            "No windows are open.".into()
+        } else {
+            format!("Open windows, front first (access in brackets; off = ask the user):\n{}", lines.join("\n"))
+        }
+    }
+}
+
+impl Exec for MacExec {
+    fn target(&self, call: &Call) -> Result<Option<Target>, String> {
+        let Some(need) = call.need() else { return Ok(None) };
+        match call {
+            Call::Click { element } | Call::TypeText { element, .. } => self.session.target_of(*element, need).map(Some),
+            Call::ClickAt { app, x, y } => {
+                let a = ui::find_app(app)?;
+                self.session.target_at(&a, *x, *y).map(Some)
+            }
+            Call::ReadWindow { app } | Call::Screenshot { app } | Call::PressKeys { app, .. } | Call::ChooseMenu { app, .. } | Call::Scroll { app, .. } => {
+                let a = ui::find_app(app)?;
+                let frame = ui::window_frame(a.pid);
+                Ok(Some(Target { bundle: a.bundle, name: a.name, pid: a.pid, need, label: None, unknown_spot: false, frame }))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    fn run(&self, call: &Call, target: Option<&Target>) -> Result<Output, String> {
+        let t = |s: String| Ok(Output::Text(s));
+        match call {
+            Call::ListWindows => t(self.list_windows()),
+            Call::ReadWindow { app } => t(self.session.read_window(&self.same_app(app, target)?)?),
+            Call::Screenshot { app } => {
+                let (text, jpeg) = self.session.screenshot(&self.same_app(app, target)?, &self.shots_dir)?;
+                Ok(Output::Image { text, jpeg })
+            }
+            Call::Click { element } | Call::TypeText { element, .. } => {
+                let now = self.session.target_of(*element, call.need().unwrap_or(super::policy::Need::Control))?;
+                if target.map(|t| t.pid) != Some(now.pid) {
+                    return Err("that control changed while waiting; read the window again".into());
+                }
+                match call {
+                    Call::TypeText { text, submit, .. } => t(self.session.type_text(*element, text, *submit)?),
+                    _ => t(self.session.click(*element)?),
+                }
+            }
+            Call::PressKeys { app, mods, key } => t(self.session.press_keys(&self.same_app(app, target)?, mods, key)?),
+            Call::ChooseMenu { app, path } => t(self.session.choose_menu(&self.same_app(app, target)?, path)?),
+            Call::Scroll { app, down, amount } => t(self.session.scroll(&self.same_app(app, target)?, *down, *amount)?),
+            Call::ClickAt { app, x, y } => t(self.session.click_at(&self.same_app(app, target)?, *x, *y)?),
+            other => run_action(other).map(Output::Text),
+        }
+    }
+}
+
+const OPEN: &str = "/usr/bin/open";
+const OSASCRIPT: &str = "/usr/bin/osascript";
+const SHORTCUTS: &str = "/usr/bin/shortcuts";
+
+/// The fixed actions (apps, links, media, reminders…): no window involved.
+fn run_action(call: &Call) -> Result<String, String> {
+        match call {
+            Call::ListApps => {
+                let names: Vec<String> = apps::installed().into_iter().map(|a| a.name).take(400).collect();
+                Ok(names.join(", "))
+            }
+            Call::OpenApp { name } => {
+                let all = apps::installed();
+                let app = apps::find(&all, name)?;
+                run_program(OPEN, &["-a".as_ref(), app.path.as_os_str()], Duration::from_secs(15))?;
+                Ok(format!("Opened {}", app.name))
+            }
+            Call::QuitApp { name } => {
+                let all = apps::installed();
+                let app = apps::find(&all, name)?;
+                let r = osascript(QUIT, &[&app.name], "the app")?;
+                Ok(if r == "quit" { format!("Quit {}", app.name) } else { format!("{} wasn't running", app.name) })
+            }
+            Call::OpenUrl { url } => {
+                run_program(OPEN, &[url.as_str().as_ref()], Duration::from_secs(15))?;
+                Ok(format!("Opened {}", url.host_str().unwrap_or("the page")))
+            }
+            Call::WebSearch { query } => {
+                let u = reqwest::Url::parse_with_params("https://www.google.com/search", &[("q", query.as_str())]).map_err(|e| e.to_string())?;
+                run_program(OPEN, &[u.as_str().as_ref()], Duration::from_secs(15))?;
+                Ok(format!("Searched the web for \"{query}\""))
+            }
+            Call::Media { action, player } => {
+                let a = match action {
+                    MediaAction::Play => "play",
+                    MediaAction::Pause => "pause",
+                    MediaAction::Next => "next",
+                    MediaAction::Previous => "previous",
+                };
+                let (script, app) = match pick_player(*player)? {
+                    Player::Spotify => (MEDIA_SPOTIFY, "Spotify"),
+                    Player::Music => (MEDIA_MUSIC, "Music"),
+                };
+                let now = osascript(script, &[a], app)?;
+                Ok(if now.is_empty() { format!("{app}: {a}") } else { format!("{app}: {a}. Now: {now}") })
+            }
+            Call::PlayMusic { query, player } => match pick_player(*player)? {
+                Player::Spotify => {
+                    let u = spotify_search(query);
+                    run_program(OPEN, &[u.as_ref()], Duration::from_secs(15))?;
+                    Ok(format!("Opened Spotify search for \"{query}\"; the user picks what to play"))
+                }
+                Player::Music => {
+                    let r = osascript(PLAY_MUSIC, &[query], "Music")?;
+                    if r == "none" {
+                        Err(format!("nothing in the Music library matches \"{query}\""))
+                    } else {
+                        Ok(format!("Playing {r} in Music"))
+                    }
+                }
+            },
+            Call::SetVolume { level, mute } => {
+                let lvl = level.map(|l| l.to_string()).unwrap_or_default();
+                let mode = match (level, mute) {
+                    (_, Some(true)) => "mute",
+                    (None, Some(false)) => "unmute",
+                    _ => "level",
+                };
+                let v = osascript(VOLUME, &[mode, &lvl], "the volume")?;
+                Ok(if mode == "mute" { "Muted".into() } else { format!("Volume is {v}%") })
+            }
+            Call::DarkMode { on } => {
+                osascript(DARK_MODE, &[if *on { "on" } else { "off" }], "System Events")?;
+                Ok(format!("Dark mode {}", if *on { "on" } else { "off" }))
+            }
+            Call::ListShortcuts => Ok(shortcuts()?.join(", ")),
+            Call::RunShortcut { name } => {
+                let all = shortcuts()?;
+                let exact = all.iter().find(|s| s.eq_ignore_ascii_case(name)).ok_or_else(|| format!("no shortcut is called \"{name}\". Call list_shortcuts to see the names."))?;
+                run_program(SHORTCUTS, &["run".as_ref(), exact.as_ref()], Duration::from_secs(60))?;
+                Ok(format!("Ran the shortcut \"{exact}\""))
+            }
+            Call::CreateReminder { title, due, notes } => {
+                let mut a: Vec<String> = vec![title.clone(), notes.clone().unwrap_or_default(), if due.is_some() { "1" } else { "0" }.into()];
+                a.extend(parts(due.as_ref()));
+                let list = osascript(&REMINDER, &a.iter().map(String::as_str).collect::<Vec<_>>(), "Reminders")?;
+                Ok(format!("Created the reminder in \"{list}\""))
+            }
+            Call::CreateEvent { title, start, end, location } => {
+                let mut a: Vec<String> = vec![title.clone(), location.clone().unwrap_or_default()];
+                a.extend(parts(Some(start)));
+                a.extend(parts(Some(end)));
+                let cal = osascript(&EVENT, &a.iter().map(String::as_str).collect::<Vec<_>>(), "Calendar")?;
+                Ok(format!("Created the event in the \"{cal}\" calendar"))
+            }
+            Call::CreateNote { title, body } => {
+                osascript(NOTE, &[&note_html(title, body)], "Notes")?;
+                Ok("Created the note".into())
+            }
+            Call::DraftEmail { to, subject, body } => {
+                let mut a: Vec<&str> = vec![subject, body];
+                a.extend(to.iter().map(String::as_str));
+                osascript(MAIL_DRAFT, &a, "Mail")?;
+                Ok("Opened the draft in Mail; the user reviews and sends it".into())
+            }
+            other => Err(format!("{} needs a window", other.tool())),
+        }
+}
+
+/// Year, month, day, hour, minute as separate arguments: AppleScript builds the date from numbers,
+/// so the user's date format and language don't matter.
+fn parts(d: Option<&NaiveDateTime>) -> Vec<String> {
+    match d {
+        Some(d) => vec![d.year().to_string(), d.month().to_string(), d.day().to_string(), d.hour().to_string(), d.minute().to_string()],
+        None => vec!["0".into(); 5],
+    }
+}
+
+/// A Spotify search link; the query is fully percent-encoded, so it stays one search term.
+fn spotify_search(query: &str) -> String {
+    format!("spotify:search:{}", percent_encoding::utf8_percent_encode(query, percent_encoding::NON_ALPHANUMERIC))
+}
+
+fn pick_player(p: Option<Player>) -> Result<Player, String> {
+    if let Some(p) = p {
+        return Ok(p);
+    }
+    let has_spotify = apps::installed().iter().any(|a| a.name == "Spotify");
+    Ok(if has_spotify { Player::Spotify } else { Player::Music })
+}
+
+fn shortcuts() -> Result<Vec<String>, String> {
+    let out = run_program(SHORTCUTS, &["list".as_ref()], Duration::from_secs(20))?;
+    Ok(out.lines().map(str::trim).filter(|l| !l.is_empty()).take(300).map(str::to_string).collect())
+}
+
+pub fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+/// Notes takes HTML; the text is escaped so it shows exactly as written.
+fn note_html(title: &str, body: &str) -> String {
+    let lines: String = body.lines().map(|l| format!("<div>{}</div>", if l.trim().is_empty() { "<br>".to_string() } else { html_escape(l) })).collect();
+    format!("<h1>{}</h1>{lines}", html_escape(title))
+}
+
+fn osascript(script: &str, args: &[&str], app: &str) -> Result<String, String> {
+    let mut a: Vec<&std::ffi::OsStr> = vec!["-e".as_ref(), script.as_ref(), "--".as_ref()];
+    a.extend(args.iter().map(|s| std::ffi::OsStr::new(*s)));
+    run_program(OSASCRIPT, &a, Duration::from_secs(60)).map_err(|e| friendly(&e, app))
+}
+
+/// AppleScript errors the user can act on.
+fn friendly(e: &str, app: &str) -> String {
+    if e.contains("-1743") || e.contains("Not authorized to send Apple events") || e.contains("not allowed assistive access") {
+        return format!("Xpu Command isn't allowed to control {app}. Allow it in System Settings › Privacy & Security › Automation.");
+    }
+    if e.contains("-1712") || e.contains("timed out") {
+        return format!("{app} didn't answer. If macOS is asking whether Xpu Command may control {app}, click Allow, then try again.");
+    }
+    if e.contains("-600") || e.contains("isn't running") {
+        return format!("{app} isn't running");
+    }
+    crate::agents::clip(e, 200)
+}
+
+/// Runs a program with a deadline; returns trimmed stdout, or a short error.
+pub(crate) fn run_program(prog: &str, args: &[&std::ffi::OsStr], timeout: Duration) -> Result<String, String> {
+    let mut cmd = Command::new(prog);
+    cmd.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = {
+        let _g = crate::agents::SPAWN_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        cmd.spawn().map_err(|e| format!("could not start {prog}: {e}"))?
+    };
+    let reader = |mut r: Box<dyn Read + Send>| std::thread::spawn(move || {
+        let mut s = String::new();
+        let _ = r.by_ref().take(256 * 1024).read_to_string(&mut s);
+        s
+    });
+    let out = reader(Box::new(child.stdout.take().ok_or("no stdout")?));
+    let err = reader(Box::new(child.stderr.take().ok_or("no stderr")?));
+    let start = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(s)) => break s,
+            Ok(None) if start.elapsed() > timeout => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("it took too long and was stopped".into());
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(30)),
+            Err(e) => return Err(e.to_string()),
+        }
+    };
+    let (out, err) = (out.join().unwrap_or_default(), err.join().unwrap_or_default());
+    if status.success() {
+        Ok(out.trim().to_string())
+    } else {
+        Err(if err.trim().is_empty() { format!("failed ({status})") } else { err.trim().to_string() })
+    }
+}
+
+
+const QUIT: &str = r#"on run argv
+  set appName to item 1 of argv
+  if application appName is running then
+    tell application appName to quit
+    return "quit"
+  end if
+  return "not running"
+end run"#;
+
+const MEDIA_MUSIC: &str = r#"on run argv
+  set a to item 1 of argv
+  tell application "Music"
+    if a is "play" then
+      play
+    else if a is "pause" then
+      pause
+    else if a is "next" then
+      next track
+    else if a is "previous" then
+      previous track
+    end if
+    try
+      return (name of current track) & " by " & (artist of current track)
+    on error
+      return ""
+    end try
+  end tell
+end run"#;
+
+const MEDIA_SPOTIFY: &str = r#"on run argv
+  set a to item 1 of argv
+  tell application "Spotify"
+    if a is "play" then
+      play
+    else if a is "pause" then
+      pause
+    else if a is "next" then
+      next track
+    else if a is "previous" then
+      previous track
+    end if
+    try
+      return (name of current track) & " by " & (artist of current track)
+    on error
+      return ""
+    end try
+  end tell
+end run"#;
+
+const PLAY_MUSIC: &str = r#"on run argv
+  set q to item 1 of argv
+  tell application "Music"
+    try
+      set p to (first user playlist whose name is q)
+      play p
+      return "the playlist " & (name of p)
+    end try
+    set hits to (every track of library playlist 1 whose name contains q or artist contains q or album contains q)
+    if (count of hits) is 0 then return "none"
+    set t to item 1 of hits
+    play t
+    return (name of t) & " by " & (artist of t)
+  end tell
+end run"#;
+
+const VOLUME: &str = r#"on run argv
+  set m to item 1 of argv
+  if m is "mute" then
+    set volume with output muted
+  else if m is "unmute" then
+    set volume without output muted
+  else
+    set volume output volume ((item 2 of argv) as integer) without output muted
+  end if
+  return (output volume of (get volume settings)) as text
+end run"#;
+
+const DARK_MODE: &str = r#"on run argv
+  tell application "System Events" to tell appearance preferences to set dark mode to ((item 1 of argv) is "on")
+  return ""
+end run"#;
+
+const MKDATE: &str = r#"
+on mkdate(p)
+  set d to current date
+  set day of d to 1
+  set year of d to (item 1 of p) as integer
+  set month of d to (item 2 of p) as integer
+  set day of d to (item 3 of p) as integer
+  set hours of d to (item 4 of p) as integer
+  set minutes of d to (item 5 of p) as integer
+  set seconds of d to 0
+  return d
+end mkdate"#;
+
+const REMINDER_BODY: &str = r#"on run argv
+  set t to item 1 of argv
+  set n to item 2 of argv
+  set hasDue to (item 3 of argv) is "1"
+  if hasDue then set d to my mkdate(items 4 thru 8 of argv)
+  tell application "Reminders"
+    set l to default list
+    tell l
+      set r to make new reminder with properties {name:t}
+    end tell
+    if n is not "" then set body of r to n
+    if hasDue then
+      set due date of r to d
+      set remind me date of r to d
+    end if
+    return name of l
+  end tell
+end run"#;
+
+const EVENT_BODY: &str = r#"on run argv
+  set t to item 1 of argv
+  set loc to item 2 of argv
+  set s to my mkdate(items 3 thru 7 of argv)
+  set e to my mkdate(items 8 thru 12 of argv)
+  tell application "Calendar"
+    set cals to (every calendar whose writable is true)
+    if (count of cals) is 0 then error "There is no calendar that can be written to."
+    set c to item 1 of cals
+    tell c
+      set ev to make new event with properties {summary:t, start date:s, end date:e}
+    end tell
+    if loc is not "" then set location of ev to loc
+    return name of c
+  end tell
+end run"#;
+
+const NOTE: &str = r#"on run argv
+  tell application "Notes"
+    make new note with properties {body:(item 1 of argv)}
+  end tell
+  return ""
+end run"#;
+
+/// Opens a visible draft. There is deliberately no "send" anywhere in this script (tested).
+const MAIL_DRAFT: &str = r#"on run argv
+  set s to item 1 of argv
+  set b to item 2 of argv
+  tell application "Mail"
+    set m to make new outgoing message with properties {subject:s, content:b, visible:true}
+    tell m
+      repeat with i from 3 to (count of argv)
+        make new to recipient at end of to recipients with properties {address:(item i of argv)}
+      end repeat
+    end tell
+    activate
+  end tell
+  return ""
+end run"#;
+
+static REMINDER: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| format!("{REMINDER_BODY}\n{MKDATE}"));
+static EVENT: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| format!("{EVENT_BODY}\n{MKDATE}"));
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn all_scripts() -> Vec<&'static str> {
+        vec![QUIT, MEDIA_MUSIC, MEDIA_SPOTIFY, PLAY_MUSIC, VOLUME, DARK_MODE, &REMINDER, &EVENT, NOTE, MAIL_DRAFT]
+    }
+
+    #[test]
+    fn scripts_take_values_only_from_argv_and_never_run_code() {
+        for s in all_scripts() {
+            assert!(s.starts_with("on run argv"), "{s}");
+            let l = s.to_lowercase();
+            for banned in ["do shell script", "run script", "load script", "store script", "system attribute", "open location"] {
+                assert!(!l.contains(banned), "{banned} in {s}");
+            }
+        }
+    }
+
+    /// Every script compiles (macOS only). Compiling sends no Apple events: nothing runs.
+    #[test]
+    fn scripts_compile() {
+        if !cfg!(target_os = "macos") {
+            return;
+        }
+        for (i, src) in all_scripts().into_iter().enumerate() {
+            let f = std::env::temp_dir().join(format!("xpu-script-{}-{i}.applescript", uuid::Uuid::new_v4().simple()));
+            std::fs::write(&f, src).unwrap();
+            let r = run_program("/usr/bin/osacompile", &["-o".as_ref(), "/dev/null".as_ref(), f.as_os_str()], Duration::from_secs(30));
+            let _ = std::fs::remove_file(&f);
+            assert!(r.is_ok(), "script {i} does not compile: {r:?}\n{src}");
+        }
+    }
+
+    #[test]
+    fn mail_never_sends() {
+        assert!(!MAIL_DRAFT.to_lowercase().contains("send"));
+        assert!(MAIL_DRAFT.contains("visible:true"));
+    }
+
+    #[test]
+    fn note_text_is_escaped() {
+        let h = note_html("A <b>", "x & y\n\n<script>");
+        assert_eq!(h, "<h1>A &lt;b&gt;</h1><div>x &amp; y</div><div><br></div><div>&lt;script&gt;</div>");
+    }
+
+    #[test]
+    fn spotify_link_is_encoded() {
+        assert_eq!(spotify_search("lo-fi & chill"), "spotify:search:lo%2Dfi%20%26%20chill");
+    }
+
+    #[test]
+    fn date_parts() {
+        let d = NaiveDateTime::parse_from_str("2026-11-15T10:05", "%Y-%m-%dT%H:%M").unwrap();
+        assert_eq!(parts(Some(&d)), ["2026", "11", "15", "10", "5"]);
+        assert_eq!(parts(None).len(), 5);
+    }
+
+    #[test]
+    fn permission_errors_are_explained() {
+        assert!(friendly("execution error: Not authorized to send Apple events to Reminders. (-1743)", "Reminders").contains("Automation"));
+        assert!(friendly("System Events got an error: AppleEvent timed out. (-1712)", "System Events").contains("click Allow"));
+    }
+
+    /// Real osascript run (macOS only): argv values stay data, even when they look like flags or code.
+    #[test]
+    fn osascript_argv_is_data() {
+        if !cfg!(target_os = "macos") {
+            return;
+        }
+        let echo = "on run argv\n  return (item 1 of argv) & \"|\" & (item 2 of argv)\nend run";
+        let r = osascript(echo, &["-e", "\" & (do shell script \"echo pwned\") & \""], "test").unwrap();
+        assert_eq!(r, "-e|\" & (do shell script \"echo pwned\") & \"");
+    }
+}
