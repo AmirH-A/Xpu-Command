@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Xpu Command</title>
+  <link rel="stylesheet" href="/src/main.css" />
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="logo">X</span><div><h1>Xpu Command</h1><p>Hold a mouse button, talk to your AI agent.</p></div></div>
+    <span class="status" id="status">…</span>
+  </header>
+
+  <section class="banner" id="perm-banner" hidden>
+    <div><b>One permission needed.</b> macOS needs <b>Accessibility</b> access so Xpu Command can capture the talk button and type for you. It never reads your screen or other keystrokes.</div>
+    <button class="primary" id="grant-ax">Open Accessibility settings</button>
+  </section>
+
+  <main>
+    <section class="card">
+      <h2><span>01</span> Talk button</h2>
+      <div class="row">
+        <label>Button<select id="button">
+          <option value="forward">Side button (forward)</option>
+          <option value="back">Side button (back)</option>
+          <option value="middle">Wheel click</option>
+        </select></label>
+        <label>Keyboard shortcut<select id="hotkey">
+          <option value="ctrl_alt_space">⌃ Control + ⌥ Option + Space</option>
+          <option value="alt_shift_space">⌥ Option + ⇧ Shift + Space</option>
+          <option value="ctrl_shift_space">⌃ Control + ⇧ Shift + Space</option>
+          <option value="">Off</option>
+        </select></label>
+      </div>
+      <div class="row">
+        <label>How it works<select id="mode">
+          <option value="hold">Hold to talk, release to send</option>
+          <option value="toggle">Click to start, click to send</option>
+        </select></label>
+      </div>
+      <label class="check"><input type="checkbox" id="auto_stop" /> Send when I stop talking <small>(after a click or a double knock)</small></label>
+      <label class="check"><input type="checkbox" id="sound_cues" /> Sound cues when listening starts and when it's sent</label>
+      <p class="note">Use the mouse button or the shortcut, whichever is handy: hold, speak, release. On a trackpad, use the shortcut.</p>
+      <label class="check"><input type="checkbox" id="knock" /> Double-knock the laptop to talk <small>(experimental)</small></label>
+      <div class="row" id="knock-row">
+        <label>Knock strength<select id="knock_sensitivity">
+          <option value="high">Light taps</option>
+          <option value="medium">Normal knocks</option>
+          <option value="low">Firm knocks only</option>
+        </select></label>
+      </div>
+      <p class="note" id="knock-note">Knock twice on the palm rest or the laptop's edge (not on the trackpad) to start; stop talking or knock again to send. Taps right after typing or clicking are ignored. Uses the MacBook's motion sensor; it is read only while this is on.</p>
+      <p class="note" id="knock-state"></p>
+      <p class="note">The button stops doing its usual job (like "Back" in a browser) while Xpu Command runs. Pause it from the menu-bar icon.</p>
+    </section>
+
+    <section class="card">
+      <h2><span>02</span> Speech to text</h2>
+      <div class="seg" id="stt">
+        <button data-v="local">On this computer <small>private, offline</small></button>
+        <button data-v="cloud">Cloud <small>OpenAI, fastest</small></button>
+      </div>
+      <label>Microphone<select id="input_device"></select></label>
+      <p class="note">Using Bluetooth headphones? Pick your laptop's microphone here: when headphones use their own mic, they switch to lower-quality call audio.</p>
+      <div id="local-box">
+        <div class="row">
+          <label>Model<select id="local_model"></select></label>
+          <label>Language<select id="language">
+            <option value="en">English</option><option value="auto">Detect automatically</option>
+            <option value="fa">Persian</option><option value="de">German</option><option value="fr">French</option><option value="es">Spanish</option>
+          </select></label>
+        </div>
+        <div class="model-line"><span id="model-state"></span><button id="download">Download model</button></div>
+        <div class="progress" hidden><i id="progress"></i></div>
+        <p class="note">Models are downloaded over HTTPS and checked against their published SHA-256 before use.</p>
+      </div>
+      <div id="cloud-box" hidden>
+        <div class="row key">
+          <label>OpenAI API key<input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…" /></label>
+          <button id="save-key">Save key</button><button id="clear-key" class="ghost">Remove</button>
+        </div>
+        <p class="note" id="key-state"></p>
+        <p class="note">Audio is sent to OpenAI only while cloud mode is on. The key is stored in your system keychain, never in a file.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2><span>03</span> Where your words go</h2>
+      <div class="seg" id="delivery">
+        <button data-v="type_into_focused">Type where my cursor is <small>any app, any agent</small></button>
+        <button data-v="agent">Send to an agent <small>runs it on a project</small></button>
+        <button data-v="control_mac">Control my Mac <small>open, play, remind, draft</small></button>
+      </div>
+      <div id="type-box">
+        <label class="check"><input type="checkbox" id="auto_submit" /> Press Enter after typing</label>
+        <p class="note warn">In a terminal, Enter runs the line. Leave this off unless you always review first.</p>
+      </div>
+      <div id="agent-box" hidden>
+        <div class="row">
+          <label>Agent<select id="agent"><option value="claude">Claude Code</option><option value="codex">Codex</option></select></label>
+          <label>What it may do<select id="safety">
+            <option value="ask_commands">Edit files; ask me before commands</option>
+            <option value="edit">Edit files in the project (no commands)</option>
+            <option value="read_only">Read only: answer and plan</option>
+          </select></label>
+        </div>
+        <div class="agents" id="agents"></div>
+        <div class="row folder">
+          <div class="path" id="project">No project folder chosen</div>
+          <button id="pick">Choose folder…</button>
+        </div>
+        <p class="note" id="ask-note">Claude asks before each command: answer <b>"yes"</b>, <b>"no"</b> or <b>"always"</b> out loud, or press to allow. Commands that delete, push or run downloaded code need a spoken "yes". With Codex this level runs read-only.</p>
+        <p class="note">Follow-ups continue the same conversation for 30 minutes. Say <b>"stop"</b> to stop the agent, <b>"new task"</b> to start a fresh conversation.</p>
+      </div>
+      <div id="mac-box" hidden>
+        <div class="row">
+          <label>Model<select id="mac_model">
+            <option value="sonnet">Sonnet: best for working inside apps</option>
+            <option value="haiku">Haiku: fastest, for simple commands</option>
+          </select></label>
+        </div>
+        <p class="note">Say things like "open Spotify", "volume 30", "remind me to call the accountant tomorrow at 10", "open gmail.com in Chrome and tell me my latest email". It reads and controls only the apps you allow under App access, and it can't run commands.</p>
+        <p class="note">Reminders, events, notes, drafts and quitting apps are shown first: <b>press or knock within 3 seconds to cancel</b>. Shortcuts need your yes: <b>press or knock to allow</b>. The first time, macOS asks whether Xpu Command may control each app.</p>
+      </div>
+      <div id="claude-box">
+        <label id="profile-row">Claude account (profile)<select id="claude_profile"></select></label>
+        <label class="check"><input type="checkbox" id="speak_summary" /> Read the result aloud in my headset</label>
+        <label class="check"><input type="checkbox" id="conversation" /> Then listen for my reply <small>(say "that's all" to finish)</small></label>
+      </div>
+    </section>
+
+    <section class="card" id="access-card">
+      <h2><span>04</span> App access</h2>
+      <p class="note">Which apps the assistant may <b>see</b> (read the window) or <b>control</b> (click, type, menus). Every app is <b>Off</b> until you change it; when it needs an app that is off, it asks you first, for that request only.</p>
+      <label class="check"><input type="checkbox" id="allow_all_apps" /> Allow all apps (control)</label>
+      <p class="note warn" id="allow-all-warn">All apps can be read and controlled. Password managers, Keychain and System Settings stay off; Terminal-like apps still need their own setting below.</p>
+      <label class="check"><input type="checkbox" id="step_by_step" /> Step by step: every action waits for my press or knock</label>
+      <div class="row folder">
+        <input id="app-filter" type="search" placeholder="Find an app…" autocomplete="off" spellcheck="false" />
+        <span class="note" id="app-count"></span>
+      </div>
+      <ol class="apps" id="apps"></ol>
+      <div class="row folder">
+        <span class="note" id="screen-state"></span>
+        <button id="grant-screen">Allow screenshots…</button>
+      </div>
+      <p class="note">Screenshots are a fallback for apps that can't be read: they need macOS Screen Recording. The assistant never types into password fields, and buttons like Send, Delete, Pay or Sign out always wait for your press.</p>
+    </section>
+
+    <section class="card" id="activity-card">
+      <h2><span>05</span> Activity</h2>
+      <p class="note">Every action taken on your Mac, newest first. Only short summaries are kept, on this computer.</p>
+      <ol class="activity" id="activity"></ol>
+      <div class="row folder"><span></span><button id="activity-clear">Clear</button></div>
+    </section>
+  </main>
+
+  <footer><span class="saved" id="saved"></span><button class="primary" id="save">Save</button></footer>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
