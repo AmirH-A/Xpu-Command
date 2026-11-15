@@ -99,6 +99,33 @@ function number() {
   if (page && $(page).hidden) showPage('talk-card');
 }
 
+let downloadPct: number | null = null;
+
+function progressBar(sizeMb: number): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'dl';
+  const bar = document.createElement('div');
+  bar.className = 'progress';
+  const fill = document.createElement('i');
+  fill.className = 'dl-fill';
+  bar.append(fill);
+  const label = document.createElement('small');
+  label.className = 'dl-label';
+  label.dataset.size = String(sizeMb);
+  box.append(bar, label);
+  return box;
+}
+
+function syncProgress() {
+  const pct = downloadPct ?? 0;
+  document.querySelectorAll<HTMLElement>('.dl-fill').forEach((el) => (el.style.width = `${pct}%`));
+  document.querySelectorAll<HTMLElement>('.dl-label').forEach((el) => {
+    const size = Number(el.dataset.size || 0);
+    el.textContent = pct >= 100 ? 'Checking the fingerprint…' : size ? `${pct}% · ${Math.round((size * pct) / 100)} of ${size} MB` : `${pct}%`;
+  });
+  $('progress').style.width = `${pct}%`;
+}
+
 type Perms = { accessibility: boolean; accessibility_required: boolean; screen_recording: boolean; microphone: 'allowed' | 'not_asked' | 'denied'; needs_move: boolean };
 let perms: Perms | null = null;
 let hasKey = false;
@@ -113,7 +140,8 @@ function renderSetup() {
     done: false, title: 'Move to Applications', why: "It's running from the download, so macOS keeps forgetting its permissions.",
     label: 'Move and reopen', act: async () => { flash('Moving to Applications…'); await invoke('move_to_applications'); },
   }] : [];
-  const all: { done: boolean; title: string; why: string; label: string; act: () => void }[] = [
+  const sizeMb = Number(model?.label.match(/\((\d+) MB/)?.[1] ?? 0);
+  const all: { done: boolean; title: string; why: string; label: string; act: () => void; download?: boolean }[] = [
     {
       done: !p.accessibility_required || p.accessibility, title: 'Allow Accessibility',
       why: 'So the talk button works. Already on? Press anyway, then switch it on again.',
@@ -125,12 +153,16 @@ function renderSetup() {
       act: async () => { await invoke('request_microphone'); await refreshStatus(); },
     },
     {
-      done: speechReady, title: s.stt === 'cloud' ? 'Add your OpenAI key' : 'Download the speech model', why: s.stt === 'cloud' ? 'Under Speech to text.' : `${model?.label ?? 'The model'}: one time, then it works offline.`,
+      done: speechReady, title: s.stt === 'cloud' ? 'Add your OpenAI key' : 'Download the speech model',
+      why: s.stt === 'cloud'
+        ? 'Under Speech to text.'
+        : `Whisper turns your voice into text right on this Mac, so your audio never leaves it. One download${sizeMb ? ` of ${sizeMb} MB` : ''} from Hugging Face (whisper.cpp), checked against its published fingerprint.`,
       label: s.stt === 'cloud' ? 'Show me' : 'Download',
       act: () => { if (s.stt === 'cloud') showPage('speech-card'); else $('download').click(); },
+      download: s.stt !== 'cloud',
     },
   ];
-  const steps = p.needs_move ? move : all;
+  const steps: typeof all = p.needs_move ? move : all;
   const left = p.needs_move ? all.filter((x) => !x.done).length + 1 : steps.filter((x) => !x.done).length;
   $('setup-card').hidden = left === 0;
   $('setup-count').textContent = left ? String(left) : '';
@@ -148,7 +180,9 @@ function renderSetup() {
     small.textContent = st.done ? 'Done' : st.why;
     text.append(b, small);
     li.append(n, text);
-    if (!st.done) {
+    if (!st.done && st.download && downloadPct !== null) {
+      text.append(progressBar(sizeMb));
+    } else if (!st.done) {
       const btn = document.createElement('button');
       btn.className = 'primary';
       btn.textContent = st.label;
@@ -157,6 +191,7 @@ function renderSetup() {
     }
     return li;
   }));
+  syncProgress();
   const how = s.mode === 'hold' ? `Hold ${BUTTON_NAME[s.button]} (or press ${s.hotkey ? 'the keyboard shortcut' : 'the button'}), say “hello”, and let go.` : `Click ${BUTTON_NAME[s.button]}, say “hello”, and pause.`;
   $('try-it').textContent = p.needs_move ? 'After it reopens, allow Accessibility and the microphone here.' : `Then try it: ${how}`;
   const st = $('status');
@@ -492,15 +527,19 @@ async function init() {
   };
   $('download').onclick = async () => {
     const btn = $<HTMLButtonElement>('download');
+    if (downloadPct !== null) return;
     btn.disabled = true;
-    (document.querySelector('.progress') as HTMLElement).hidden = false;
+    downloadPct = 0;
+    $('progress').parentElement!.hidden = false;
+    render();
     try {
       await invoke('download_model', { id: s.local_model });
       flash('Model downloaded and verified');
       await refreshModels();
     } catch (e) { flash(String(e), true); }
+    downloadPct = null;
     btn.disabled = false;
-    (document.querySelector('.progress') as HTMLElement).hidden = true;
+    $('progress').parentElement!.hidden = true;
     render();
   };
   $('save-key').onclick = async () => {
@@ -511,7 +550,7 @@ async function init() {
     await refreshStatus();
   };
   $('clear-key').onclick = async () => { await invoke('clear_cloud_key'); flash('Key removed'); await refreshStatus(); };
-  await listen<[string, number]>('model-progress', ({ payload: [, pct] }) => { $('progress').style.width = `${pct}%`; });
+  await listen<[string, number]>('model-progress', ({ payload: [, pct] }) => { downloadPct = pct; syncProgress(); });
 }
 
 init().catch((e) => flash(String(e), true));
