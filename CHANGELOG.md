@@ -2,6 +2,12 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
+## 0.4.1 (2026-11-15)
+
+### Fixed
+- **Permissions didn't stick** when the app was opened straight from the download or the DMG: macOS ran a temporary copy and forgot them on every launch, so Get started kept asking. It now offers **Move and reopen**, which moves Xpu Command to Applications (replacing an older copy) and opens it from there.
+- **Accessibility or microphone stayed off after an update**, even with the switch on in System Settings. The buttons now clear the old entry, so macOS asks again and the switch works.
+
 ## 0.4.0 (2026-11-15)
 
 ### Added
