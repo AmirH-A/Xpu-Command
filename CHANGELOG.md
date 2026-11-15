@@ -2,6 +2,14 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
+## 0.5.1 (2026-11-15)
+
+### Fixed
+- **Get started never finished when Xpu Command was opened from the download.** macOS runs a temporary copy that can't keep permissions. Xpu Command now asks at launch to move itself to Applications, and Get started shows only that step until it's done.
+- **Move and reopen closed the app without reopening it**: the new copy started while the old one was still running. It now waits for the old one to quit.
+- **Settings buttons did nothing** in installed builds since 0.3.0: microphone, move to Applications, undo, memory and routines weren't on the window's allow-list, so the page stopped setting up halfway and never noticed permission changes. They're all allowed now, and a test guards against it.
+- A log is kept in `~/Library/Logs/Xpu Command/` so problems can be traced.
+
 ## 0.5.0 (2026-11-15)
 
 ### Changed
