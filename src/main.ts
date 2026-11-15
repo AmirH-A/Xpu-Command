@@ -50,6 +50,7 @@ function render() {
   $('claude-box').hidden = s.delivery === 'type_into_focused';
   $('profile-row').hidden = s.delivery === 'agent' && s.agent !== 'claude';
   $('knock-row').hidden = !s.knock;
+  scheduleSave();
   $('airpods-note').hidden = !s.airpods;
   $('fa-note').hidden = s.language !== 'fa';
   $('ask-note').hidden = s.safety !== 'ask_commands';
@@ -60,6 +61,88 @@ function render() {
   const m = models.find((x) => x.id === s.local_model);
   $('model-state').textContent = m?.downloaded ? 'Downloaded and ready' : 'Not downloaded yet';
   $<HTMLButtonElement>('download').hidden = !!m?.downloaded;
+  number();
+  renderSetup();
+}
+
+let savedJson = '';
+let saveTimer: number | undefined;
+
+function scheduleSave() {
+  if (!s || !savedJson || JSON.stringify(s) === savedJson) return;
+  window.clearTimeout(saveTimer);
+  flash('Saving…');
+  saveTimer = window.setTimeout(async () => {
+    try {
+      s = await invoke<Settings>('save_settings', { new: s });
+      savedJson = JSON.stringify(s);
+      flash('Saved');
+      render();
+    } catch (e) { flash(String(e), true); }
+  }, 400);
+}
+
+function number() {
+  let i = 0;
+  document.querySelectorAll<HTMLElement>('main > section.card:not(.setup)').forEach((card) => {
+    const span = card.querySelector('h2 span');
+    if (!card.hidden && span) span.textContent = String(++i).padStart(2, '0');
+    const link = document.querySelector<HTMLElement>(`nav#sections a[href="#${card.id}"]`);
+    if (link) link.hidden = card.hidden;
+  });
+}
+
+type Perms = { accessibility: boolean; accessibility_required: boolean; screen_recording: boolean; microphone: 'allowed' | 'not_asked' | 'denied' };
+let perms: Perms | null = null;
+let hasKey = false;
+const BUTTON_NAME: Record<Settings['button'], string> = { forward: 'the forward side button', back: 'the back side button', middle: 'the wheel' };
+
+function renderSetup() {
+  if (!perms) return;
+  const p = perms;
+  const model = models.find((x) => x.id === s.local_model);
+  const speechReady = s.stt === 'cloud' ? hasKey : !!model?.downloaded;
+  const steps: { done: boolean; title: string; why: string; label: string; act: () => void }[] = [
+    { done: !p.accessibility_required || p.accessibility, title: 'Allow Accessibility', why: 'So the talk button works and Xpu Command can type for you.', label: 'Open settings', act: () => invoke('open_permission_settings', { which: 'accessibility' }) },
+    {
+      done: p.microphone === 'allowed', title: 'Allow the microphone', why: p.microphone === 'denied' ? 'It was turned off: switch Xpu Command on in the Microphone list.' : 'So Xpu Command can hear you.',
+      label: p.microphone === 'not_asked' ? 'Allow' : 'Open settings',
+      act: async () => { if (p.microphone === 'not_asked') { await invoke('request_microphone'); await refreshStatus(); } else { await invoke('open_permission_settings', { which: 'microphone' }); } },
+    },
+    {
+      done: speechReady, title: s.stt === 'cloud' ? 'Add your OpenAI key' : 'Download the speech model', why: s.stt === 'cloud' ? 'Under Speech to text.' : `${model?.label ?? 'The model'}: one time, then it works offline.`,
+      label: s.stt === 'cloud' ? 'Show me' : 'Download',
+      act: () => { if (s.stt === 'cloud') $('speech-card').scrollIntoView(); else $('download').click(); },
+    },
+  ];
+  const left = steps.filter((x) => !x.done).length;
+  $('setup-card').hidden = left === 0;
+  $('steps').replaceChildren(...steps.map((st, i) => {
+    const li = document.createElement('li');
+    li.className = st.done ? 'done' : '';
+    const n = document.createElement('i');
+    n.textContent = st.done ? '✓' : String(i + 1);
+    const text = document.createElement('div');
+    const b = document.createElement('b');
+    b.textContent = st.title;
+    const small = document.createElement('small');
+    small.textContent = st.done ? 'Done' : st.why;
+    text.append(b, small);
+    li.append(n, text);
+    if (!st.done) {
+      const btn = document.createElement('button');
+      btn.className = 'primary';
+      btn.textContent = st.label;
+      btn.onclick = () => { Promise.resolve(st.act()).catch((e) => flash(String(e), true)); };
+      li.append(btn);
+    }
+    return li;
+  }));
+  const how = s.mode === 'hold' ? `Hold ${BUTTON_NAME[s.button]} (or press ${s.hotkey ? 'the keyboard shortcut' : 'the button'}), say “hello”, and let go.` : `Click ${BUTTON_NAME[s.button]}, say “hello”, and pause.`;
+  $('try-it').textContent = `Then try it: ${how}`;
+  const st = $('status');
+  st.textContent = left === 0 ? 'Ready' : `${left} step${left === 1 ? '' : 's'} to finish`;
+  st.className = `status ${left === 0 ? 'ok' : 'bad'}`;
 }
 
 async function refreshModels() {
@@ -77,7 +160,7 @@ async function refreshDevices() {
   if (s.input_device && !names.includes(s.input_device)) list.push(opt(s.input_device, `${s.input_device} (not connected)`));
   sel.replaceChildren(...list);
   sel.value = s.input_device ?? '';
-  sel.onchange = () => { s.input_device = sel.value || null; };
+  sel.onchange = () => { s.input_device = sel.value || null; render(); };
 }
 
 async function refreshProfiles() {
@@ -87,7 +170,7 @@ async function refreshProfiles() {
   const label = (n: string) => (n === '.claude' ? 'personal (~/.claude)' : `${n.replace('.claude-', '')} (~/${n})`);
   sel.replaceChildren(opt('', "Claude's default"), ...names.map((n) => opt(n, label(n))));
   sel.value = s.claude_profile ?? '';
-  sel.onchange = () => { s.claude_profile = sel.value || null; };
+  sel.onchange = () => { s.claude_profile = sel.value || null; render(); };
 }
 
 type ActivityEntry = { at: string; tool: string; summary: string; outcome: 'done' | 'failed' | 'cancelled' | 'declined' | 'refused'; detail: string };
@@ -282,14 +365,12 @@ async function refreshActivity() {
 }
 
 async function refreshStatus() {
-  const p = await invoke<{ accessibility: boolean; accessibility_required: boolean; screen_recording: boolean }>('permission_status');
+  const p = await invoke<Perms>('permission_status');
+  perms = p;
+  hasKey = await invoke<boolean>('has_cloud_key');
   $('screen-state').textContent = p.screen_recording ? 'Screenshots: allowed' : 'Screenshots: not allowed (optional)';
   $<HTMLButtonElement>('grant-screen').hidden = p.screen_recording;
-  const ready = !p.accessibility_required || p.accessibility;
-  $('perm-banner').hidden = ready;
-  const st = $('status');
-  st.textContent = ready ? 'Talk button ready' : 'Needs permission';
-  st.className = `status ${ready ? 'ok' : 'bad'}`;
+  renderSetup();
   const knockErr = await invoke<string | null>('knock_status');
   $('knock-state').textContent = knockErr ? `Double knock is not available: ${knockErr}` : '';
   $('knock-state').className = `note${knockErr ? ' warn' : ''}`;
@@ -315,6 +396,7 @@ function flash(msg: string, err = false) {
 
 async function init() {
   s = await invoke<Settings>('get_settings');
+  savedJson = JSON.stringify(s);
   await refreshModels();
   await refreshDevices();
   await refreshProfiles();
@@ -325,7 +407,7 @@ async function init() {
     if (s.language !== 'en' && s.language !== 'auto' && s.local_model.endsWith('.en')) {
       s.local_model = s.language === 'fa' || s.local_model === 'small.en' ? 'small' : 'base';
       $<HTMLSelectElement>('local_model').value = s.local_model;
-      flash('That language needs a multilingual speech model: switched it for you. Download it below, then Save.');
+      flash('Switched to a multilingual speech model: download it below.');
     }
     render();
   };
@@ -334,7 +416,7 @@ async function init() {
   ap.onchange = () => { s.airpods = ap.checked; render(); };
   const hk = $<HTMLSelectElement>('hotkey');
   hk.value = s.hotkey ?? '';
-  hk.onchange = () => { s.hotkey = (hk.value || null) as Settings['hotkey']; };
+  hk.onchange = () => { s.hotkey = (hk.value || null) as Settings['hotkey']; render(); };
   (['button', 'mode', 'knock_sensitivity', 'mac_model', 'local_model', 'agent', 'safety'] as const).forEach(bindSelect);
   bindCheck('auto_submit');
   bindCheck('speak_summary');
@@ -372,7 +454,6 @@ async function init() {
   $('activity-clear').onclick = async () => {
     try { await invoke('activity_clear'); await refreshActivity(); flash('Activity cleared'); } catch (e) { flash(String(e), true); }
   };
-  $('grant-ax').onclick = () => invoke('open_permission_settings', { which: 'accessibility' });
   $('pick-custom').onclick = async () => {
     try {
       const p = await invoke<string | null>('pick_custom_agent');
@@ -406,10 +487,6 @@ async function init() {
     await refreshStatus();
   };
   $('clear-key').onclick = async () => { await invoke('clear_cloud_key'); flash('Key removed'); await refreshStatus(); };
-  $('save').onclick = async () => {
-    try { s = await invoke<Settings>('save_settings', { new: s }); flash('Saved'); render(); }
-    catch (e) { flash(String(e), true); }
-  };
   await listen<[string, number]>('model-progress', ({ payload: [, pct] }) => { $('progress').style.width = `${pct}%`; });
 }
 

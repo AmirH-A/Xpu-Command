@@ -9,16 +9,20 @@
 <body>
   <header>
     <div class="brand"><span class="logo">X</span><div><h1>Xpu Command</h1><p>Hold a mouse button, talk to your AI agent.</p></div></div>
-    <span class="status" id="status">…</span>
+    <div class="head-right"><span class="saved" id="saved"></span><span class="status" id="status">…</span></div>
   </header>
-
-  <section class="banner" id="perm-banner" hidden>
-    <div><b>One permission needed.</b> macOS needs <b>Accessibility</b> access so Xpu Command can capture the talk button and type for you. It never reads your screen or other keystrokes.</div>
-    <button class="primary" id="grant-ax">Open Accessibility settings</button>
-  </section>
+  <nav id="sections">
+    <a href="#talk-card">Talk</a><a href="#speech-card">Speech</a><a href="#words-card">Words go to</a><a href="#access-card">App access</a><a href="#activity-card">Activity</a><a href="#memory-card">Memory</a><a href="#routines-card">Routines</a>
+  </nav>
 
   <main>
-    <section class="card">
+    <section class="card setup" id="setup-card" hidden>
+      <h2>Get started</h2>
+      <ol class="steps" id="steps"></ol>
+      <p class="note" id="try-it"></p>
+    </section>
+
+    <section class="card" id="talk-card">
       <h2><span>01</span> Talk button</h2>
       <div class="row">
         <label>Button<select id="button">
@@ -57,7 +61,7 @@
       <p class="note">The button stops doing its usual job (like "Back" in a browser) while Xpu Command runs. Pause it from the menu-bar icon.</p>
     </section>
 
-    <section class="card">
+    <section class="card" id="speech-card">
       <h2><span>02</span> Speech to text</h2>
       <div class="seg" id="stt">
         <button data-v="local">On this computer <small>private, offline</small></button>
@@ -88,7 +92,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card" id="words-card">
       <h2><span>03</span> Where your words go</h2>
       <div class="seg" id="delivery">
         <button data-v="type_into_focused">Type where my cursor is <small>any app, any agent</small></button>
@@ -182,7 +186,7 @@
     </section>
   </main>
 
-  <footer><span class="saved" id="saved"></span><button class="primary" id="save">Save</button></footer>
+
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
