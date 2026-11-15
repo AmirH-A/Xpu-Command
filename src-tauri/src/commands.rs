@@ -65,13 +65,33 @@ pub fn permission_status() -> permissions::PermissionStatus {
 }
 
 #[tauri::command]
+pub async fn move_to_applications(app: AppHandle) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        let dst = tauri::async_runtime::spawn_blocking(permissions::move_to_applications).await.map_err(|_| msg("the move was interrupted"))??;
+        let _guard = crate::agents::SPAWN_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        std::process::Command::new("/usr/bin/open").arg("-n").arg(&dst).spawn().map_err(|e| msg(format!("moved, but couldn't reopen it: {e}")))?;
+        drop(_guard);
+        app.exit(0);
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Err(msg("only on macOS"))
+    }
+}
+
+#[tauri::command]
 pub async fn request_microphone() -> bool {
     permissions::request_microphone().await
 }
 
 #[tauri::command]
 pub fn open_permission_settings(which: String) -> Result<()> {
-    if which == "accessibility" {
+    if which == "accessibility" && !permissions::accessibility_trusted(false) {
+        #[cfg(target_os = "macos")]
+        permissions::reset("Accessibility");
         permissions::accessibility_trusted(true);
     }
     permissions::open_settings(&which)

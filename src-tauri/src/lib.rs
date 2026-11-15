@@ -82,6 +82,7 @@ pub fn run() {
             commands::memory_clear,
             commands::pick_custom_agent,
             commands::request_microphone,
+            commands::move_to_applications,
             commands::routines_list,
             commands::routine_suggestions,
             commands::routine_save,

@@ -92,7 +92,7 @@ function number() {
   });
 }
 
-type Perms = { accessibility: boolean; accessibility_required: boolean; screen_recording: boolean; microphone: 'allowed' | 'not_asked' | 'denied' };
+type Perms = { accessibility: boolean; accessibility_required: boolean; screen_recording: boolean; microphone: 'allowed' | 'not_asked' | 'denied'; needs_move: boolean };
 let perms: Perms | null = null;
 let hasKey = false;
 const BUTTON_NAME: Record<Settings['button'], string> = { forward: 'the forward side button', back: 'the back side button', middle: 'the wheel' };
@@ -102,12 +102,21 @@ function renderSetup() {
   const p = perms;
   const model = models.find((x) => x.id === s.local_model);
   const speechReady = s.stt === 'cloud' ? hasKey : !!model?.downloaded;
+  const move = p.needs_move ? [{
+    done: false, title: 'Move Xpu Command to Applications', why: "It's running from the download, so macOS forgets its permissions every time. This moves it, replaces any older copy, and reopens it.",
+    label: 'Move and reopen', act: async () => { flash('Moving to Applications…'); await invoke('move_to_applications'); },
+  }] : [];
   const steps: { done: boolean; title: string; why: string; label: string; act: () => void }[] = [
-    { done: !p.accessibility_required || p.accessibility, title: 'Allow Accessibility', why: 'So the talk button works and Xpu Command can type for you.', label: 'Open settings', act: () => invoke('open_permission_settings', { which: 'accessibility' }) },
+    ...move,
     {
-      done: p.microphone === 'allowed', title: 'Allow the microphone', why: p.microphone === 'denied' ? 'It was turned off: switch Xpu Command on in the Microphone list.' : 'So Xpu Command can hear you.',
-      label: p.microphone === 'not_asked' ? 'Allow' : 'Open settings',
-      act: async () => { if (p.microphone === 'not_asked') { await invoke('request_microphone'); await refreshStatus(); } else { await invoke('open_permission_settings', { which: 'microphone' }); } },
+      done: !p.accessibility_required || p.accessibility, title: 'Allow Accessibility',
+      why: 'So the talk button works and Xpu Command can type for you. Already switched on? Press the button anyway: it clears the old entry, then switch Xpu Command on again.',
+      label: 'Open settings', act: () => invoke('open_permission_settings', { which: 'accessibility' }),
+    },
+    {
+      done: p.microphone === 'allowed', title: 'Allow the microphone', why: p.microphone === 'denied' ? 'It is turned off. Press Allow, then choose Allow when macOS asks.' : 'So Xpu Command can hear you.',
+      label: 'Allow',
+      act: async () => { await invoke('request_microphone'); await refreshStatus(); },
     },
     {
       done: speechReady, title: s.stt === 'cloud' ? 'Add your OpenAI key' : 'Download the speech model', why: s.stt === 'cloud' ? 'Under Speech to text.' : `${model?.label ?? 'The model'}: one time, then it works offline.`,
