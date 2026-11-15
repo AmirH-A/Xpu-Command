@@ -5,6 +5,21 @@ a side button on any mouse, speak, release. Your words are transcribed on your c
 where your cursor is, or handed to **Claude Code** or **Codex** to work on your project, with live status
 and a spoken summary in your headset when it's done.
 
+<p align="center"><img src="assets/screenshots/hero.png" alt="Xpu Command settings with the listening pill" width="820"></p>
+
+<p align="center"><b><a href="https://github.com/XPU-LAB/xpu-command/releases/latest">Download for macOS</a></b> · free and open source · speech stays on your Mac</p>
+
+## Screenshots
+
+| | |
+|---|---|
+| <img src="assets/screenshots/get-started.png" alt="Get started: three steps with a download progress bar"> | <img src="assets/screenshots/modes.png" alt="Modes: type, send to an agent, or control your Mac"> |
+| **Get started.** Three steps, one button each, with a progress bar for the speech model. | **Three modes.** Type where your cursor is, send to Claude Code or Codex, or control your Mac. |
+| <img src="assets/screenshots/apps.png" alt="App access: Off, See, Control or Ask for each app"> | <img src="assets/screenshots/memory.png" alt="Memory: notes the assistant knows about you"> |
+| **App access.** Every app is Off until you choose See, Control or Ask. | **Memory.** "Remember that Sara is my accountant". Stays on your Mac. |
+| <img src="assets/screenshots/routines.png" alt="Routines: several actions under one name"> | <img src="assets/screenshots/pill-states.png" alt="The status pill: listening, working, allow, done"> |
+| **Routines.** Say a name and several actions run at once. | **The pill.** Listening, working, asking before a command, done. |
+
 ## Download
 
 **[Download Xpu Command for macOS (Apple silicon)](https://github.com/XPU-LAB/xpu-command/releases/latest)**: open the latest release and get the `.dmg` file under *Assets*.
