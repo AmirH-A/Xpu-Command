@@ -1,0 +1,13 @@
+@font-face { font-family: "Sora"; src: url("./fonts/Sora.woff2") format("woff2"); font-weight: 500 700; font-display: swap; }
+@font-face { font-family: "Manrope"; src: url("./fonts/Manrope.woff2") format("woff2"); font-weight: 400 700; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("./fonts/JetBrainsMono.woff2") format("woff2"); font-weight: 400 500; font-display: swap; }
+
+:root {
+  --font-display: "Sora", -apple-system, "SF Pro Display", system-ui, sans-serif;
+  --font-body: "Manrope", -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --xpu-violet: #7c5cff;
+  --xpu-amber: #ffb547;
+  --xpu-green: #3ddc97;
+  --xpu-ink: #121019;
+}
