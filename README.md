@@ -7,7 +7,7 @@ and a spoken summary in your headset when it's done.
 
 ## Download
 
-**[Download Xpu Command for macOS (Apple silicon)](https://github.com/AmirH-A/Xpu-Command/releases/latest)**: open the latest release and get the `.dmg` file under *Assets*.
+**[Download Xpu Command for macOS (Apple silicon)](https://github.com/XPU-LAB/xpu-command/releases/latest)**: open the latest release and get the `.dmg` file under *Assets*.
 
 | | |
 |---|---|
