@@ -355,10 +355,14 @@ async function refreshUndo() {
   $('undo-what').textContent = what.length ? `Last request: ${what.join(', ')}` : '';
 }
 
+async function quietly(f: () => Promise<void>) {
+  try { await f(); } catch (e) { console.warn(e); }
+}
+
 async function refreshActivity() {
-  await refreshUndo();
-  await refreshMemory();
-  await refreshRoutines();
+  await quietly(refreshUndo);
+  await quietly(refreshMemory);
+  await quietly(refreshRoutines);
   const rows = await invoke<ActivityEntry[]>('activity_recent');
   const list = $('activity');
   if (!rows.length) {
@@ -454,8 +458,8 @@ async function init() {
     if (!ok) await invoke('open_permission_settings', { which: 'screen' });
   };
   render();
-  await refreshStatus();
-  setInterval(refreshStatus, 4000);
+  setInterval(() => { void quietly(refreshStatus); }, 4000);
+  await quietly(refreshStatus);
 
   const addFact = async () => {
     const input = $<HTMLInputElement>('memory-new');

@@ -304,3 +304,38 @@ pub fn input_devices() -> Vec<String> {
 pub fn agent_status() -> Vec<agents::AgentInfo> {
     agents::status()
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    fn invoked(text: &str) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
+        for part in text.split("invoke").skip(1) {
+            let rest = match part.strip_prefix('<') {
+                Some(generic) => match generic.find(">(") {
+                    Some(i) => &generic[i + 1..],
+                    None => continue,
+                },
+                None => part,
+            };
+            if let Some(name) = rest.strip_prefix("('").and_then(|r| r.split('\'').next()) {
+                out.insert(name.to_string());
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn every_command_the_settings_window_calls_is_registered_and_allowed() {
+        let ui = include_str!("../../src/main.ts");
+        let used = invoked(ui);
+        let allowed = include_str!("../permissions/app.toml");
+        let registered = include_str!("lib.rs");
+        assert!(used.len() > 20, "found {used:?}");
+        for c in &used {
+            assert!(allowed.contains(&format!("\"{c}\"")), "{c} is called by Settings but missing from permissions/app.toml");
+            assert!(registered.contains(&format!("commands::{c},")), "{c} is called by Settings but not registered in lib.rs");
+        }
+    }
+}
