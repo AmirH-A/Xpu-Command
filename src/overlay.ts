@@ -7,6 +7,21 @@ const LABEL: Record<Phase, string> = {
   listening: 'Listening', transcribing: 'Transcribing', typing: 'Typing', working: 'Working', done: 'Done', error: 'Problem', pending: 'About to', confirm: 'Allow?', hidden: '',
 };
 
+const MIC = '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" fill="none"/>';
+const ICON: Partial<Record<Phase, string>> = {
+  done: '<path d="M5 12.5l4.5 4.5L19 7.5" fill="none"/>',
+  error: '<path d="M12 6v8" fill="none"/><circle cx="12" cy="18.5" r="1.3" stroke="none"/>',
+  confirm: '<path d="M9 9a3 3 0 1 1 4 2.8c-.7.3-1 .9-1 1.7V14" fill="none"/><circle cx="12" cy="18.5" r="1.3" stroke="none"/>',
+  pending: '<circle cx="12" cy="12" r="8" fill="none"/><path d="M12 7.5V12l3 2" fill="none"/>',
+  typing: '<path d="M4 8h16M4 12h16M4 16h10" fill="none"/>',
+};
+
+function fit(phase: Phase, t: string): string {
+  if (phase === 'confirm' && t.length > 110) return `…${t.slice(t.length - 108)}`;
+  return t;
+}
+
+const orb = document.getElementById('orb')!;
 const pill = document.getElementById('pill')!;
 const phase = document.getElementById('phase')!;
 const text = document.getElementById('text')!;
@@ -19,7 +34,11 @@ const levels: number[] = Array(N).fill(0);
 void listen<OverlayState>('overlay', ({ payload }) => {
   pill.dataset.phase = payload.phase;
   phase.textContent = LABEL[payload.phase] ?? '';
-  text.textContent = payload.text;
+  orb.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[payload.phase] ?? MIC}</svg>`;
+  const shown = fit(payload.phase, payload.text);
+  text.textContent = shown;
+  text.classList.toggle('long', shown.length > 80);
+  text.title = payload.text;
   agent.textContent = payload.agent ?? '';
   if (payload.phase === 'listening') levels.fill(0);
 });

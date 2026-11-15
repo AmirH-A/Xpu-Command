@@ -516,7 +516,7 @@ impl Controller {
         }
         if peak < SILENT_PEAK {
             return Err(msg(if cfg!(target_os = "macos") {
-                "No sound from the microphone. Allow microphone access (System Settings › Privacy & Security › Microphone) and check the input device in Settings."
+                "No sound from the microphone. Turn on Xpu Command in System Settings › Privacy & Security › Microphone."
             } else {
                 "No sound from the microphone. Check microphone access and the input device in Settings."
             }));

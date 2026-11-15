@@ -19,6 +19,8 @@ html, body { margin: 0; background: transparent; overflow: hidden; font: 14px/1.
 .agent { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: rgba(124, 92, 255, .28); color: #dcd4ff; }
 .agent:empty { display: none; }
 .text { font-size: 15px; font-weight: 500; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; }
+.text.long { font-size: 13.5px; line-height: 1.3; -webkit-line-clamp: 3; }
+.pill[data-phase="confirm"] .text { -webkit-line-clamp: 3; }
 .bars { display: flex; gap: 3px; height: 18px; align-items: center; }
 .bars i { display: block; width: 4px; border-radius: 2px; background: linear-gradient(var(--violet), var(--blue)); height: 3px; transition: height .08s linear; }
 .pill:not([data-phase="listening"]) .bars { display: none; }
