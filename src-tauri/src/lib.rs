@@ -33,7 +33,14 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{Manager, WindowEvent};
 
 pub fn run() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info,whisper_rs=error")).init();
+    let mut logger = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info,whisper_rs=error"));
+    if !cfg!(debug_assertions) {
+        if let Some(file) = log_file() {
+            logger.target(env_logger::Target::Pipe(Box::new(file)));
+        }
+    }
+    logger.init();
+    log::info!("Xpu Command {} starting from {:?}", env!("CARGO_PKG_VERSION"), std::env::current_exe().ok());
     whisper_rs::install_logging_hooks();
 
     #[cfg(debug_assertions)]
@@ -94,6 +101,8 @@ pub fn run() {
         .setup(move |app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            #[cfg(target_os = "macos")]
+            offer_move(app.handle().clone());
 
             let open = MenuItem::with_id(app, "open", "Settings…", true, None::<&str>)?;
             let pause = MenuItem::with_id(app, "pause", "Pause talk button", true, None::<&str>)?;
@@ -256,4 +265,38 @@ static KNOCK_STARTED: std::sync::OnceLock<std::result::Result<(), String>> = std
 /// Why double knock doesn't work here, if it was tried and failed.
 pub(crate) fn knock_error() -> Option<String> {
     KNOCK_STARTED.get().and_then(|r| r.clone().err())
+}
+
+fn log_file() -> Option<std::fs::File> {
+    let dir = dirs::home_dir()?.join("Library/Logs/Xpu Command");
+    std::fs::create_dir_all(&dir).ok()?;
+    let path = dir.join("xpu-command.log");
+    if std::fs::metadata(&path).is_ok_and(|m| m.len() > 1024 * 1024) {
+        let _ = std::fs::rename(&path, dir.join("xpu-command.old.log"));
+    }
+    std::fs::OpenOptions::new().create(true).append(true).open(path).ok()
+}
+
+#[cfg(target_os = "macos")]
+fn offer_move(app: tauri::AppHandle) {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+    let Some(bundle) = permissions::running_bundle() else { return };
+    if !permissions::needs_move(&bundle) {
+        return;
+    }
+    log::info!("running from a temporary copy: {}", bundle.display());
+    let handle = app.clone();
+    app.dialog()
+        .message("Xpu Command is running from the download, so macOS can't keep its permissions.\n\nMove it to your Applications folder and reopen it? Any older copy there is replaced.")
+        .title("Move to Applications?")
+        .kind(MessageDialogKind::Info)
+        .buttons(MessageDialogButtons::OkCancelCustom("Move to Applications".into(), "Not Now".into()))
+        .show(move |yes| {
+            if yes {
+                if let Err(e) = commands::move_and_relaunch(&handle) {
+                    log::warn!("move to Applications: {e}");
+                    handle.dialog().message(format!("Couldn't move it: {e}\n\nDrag Xpu Command into Applications in Finder instead.")).title("Move to Applications").show(|_| {});
+                }
+            }
+        });
 }

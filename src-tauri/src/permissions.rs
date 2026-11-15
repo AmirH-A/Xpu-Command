@@ -22,13 +22,21 @@ pub enum Mic {
 }
 
 pub fn status() -> PermissionStatus {
-    PermissionStatus {
+    let s = PermissionStatus {
         accessibility: accessibility_trusted(false),
         accessibility_required: cfg!(target_os = "macos"),
         screen_recording: screen_recording(),
         microphone: microphone(),
         needs_move: running_bundle().is_some_and(|b| needs_move(&b)),
+    };
+    static LAST: parking_lot::Mutex<Option<String>> = parking_lot::Mutex::new(None);
+    let now = format!("{s:?}");
+    let mut last = LAST.lock();
+    if last.as_deref() != Some(now.as_str()) {
+        log::info!("permissions: {now}");
+        *last = Some(now);
     }
+    s
 }
 
 pub const BUNDLE_ID: &str = "app.xpucommand.desktop";

@@ -113,8 +113,7 @@ function renderSetup() {
     done: false, title: 'Move to Applications', why: "It's running from the download, so macOS keeps forgetting its permissions.",
     label: 'Move and reopen', act: async () => { flash('Moving to Applications…'); await invoke('move_to_applications'); },
   }] : [];
-  const steps: { done: boolean; title: string; why: string; label: string; act: () => void }[] = [
-    ...move,
+  const all: { done: boolean; title: string; why: string; label: string; act: () => void }[] = [
     {
       done: !p.accessibility_required || p.accessibility, title: 'Allow Accessibility',
       why: 'So the talk button works. Already on? Press anyway, then switch it on again.',
@@ -131,7 +130,8 @@ function renderSetup() {
       act: () => { if (s.stt === 'cloud') showPage('speech-card'); else $('download').click(); },
     },
   ];
-  const left = steps.filter((x) => !x.done).length;
+  const steps = p.needs_move ? move : all;
+  const left = p.needs_move ? all.filter((x) => !x.done).length + 1 : steps.filter((x) => !x.done).length;
   $('setup-card').hidden = left === 0;
   $('setup-count').textContent = left ? String(left) : '';
   if (!page) showPage(left ? 'setup-card' : 'talk-card');
@@ -158,7 +158,7 @@ function renderSetup() {
     return li;
   }));
   const how = s.mode === 'hold' ? `Hold ${BUTTON_NAME[s.button]} (or press ${s.hotkey ? 'the keyboard shortcut' : 'the button'}), say “hello”, and let go.` : `Click ${BUTTON_NAME[s.button]}, say “hello”, and pause.`;
-  $('try-it').textContent = `Then try it: ${how}`;
+  $('try-it').textContent = p.needs_move ? 'After it reopens, allow Accessibility and the microphone here.' : `Then try it: ${how}`;
   const st = $('status');
   st.textContent = left === 0 ? 'Ready' : `${left} step${left === 1 ? '' : 's'} to finish`;
   st.className = `status ${left === 0 ? 'ok' : 'bad'}`;
