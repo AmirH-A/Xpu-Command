@@ -50,7 +50,7 @@ mouse button (held) ─► microphone ─► speech-to-text ─► ┬─ Mode A
   - Say **"stop"** to stop the agent, or **"new task"** to start fresh.
   - **Several Claude accounts?** Pick the profile (`~/.claude`, `~/.claude-work`, …) in Settings; it's passed as `CLAUDE_CONFIG_DIR`.
 - **Mode C, "control my Mac"** (macOS): *"open Spotify"*, *"volume 30"*, *"remind me to call the accountant tomorrow at 10"*, *"draft an email to sara@example.com saying I'll be late"*.
-  - Claude Code plans with **only the app's own 15 tools** (no shell, no files, no web); the app checks every call, then runs, shows-then-runs, or asks first, by risk.
+  - Claude Code plans with **only the app's own 27 tools** (no shell, no files, no web); the app checks every call, then runs, shows-then-runs, or asks first, by risk.
   - Reminders, events, notes, drafts and quitting apps: shown first, **press or knock within 3 s to cancel**. Shortcuts: **press or knock to allow**. Nothing is ever sent, deleted or bought.
   - **Works inside apps you allow** (Settings › App access: Off / See / Control / Ask each time; Off by default). It reads windows through macOS Accessibility (real buttons and fields, numbered), clicks, types, uses menus and keys; screenshots are a fallback. A glowing outline marks the window it is working on.
   - Every action is in **Settings › Activity**. Debug: `xpu-command --selftest-mac "open calculator"`.
@@ -79,7 +79,7 @@ npx tauri dev          # first build compiles whisper.cpp: a few minutes
 Tests and checks:
 
 ```bash
-cd src-tauri && cargo test && cargo clippy --all-targets -- -D warnings   # 31 tests, incl. fake-agent integration tests
+cd src-tauri && cargo test && cargo clippy --all-targets -- -D warnings   # 126 tests, incl. fake-agent integration tests
 cargo audit --deny unsound --deny yanked --ignore RUSTSEC-2024-0429
 npm run typecheck
 # debug builds only: the pipeline without the GUI
@@ -133,6 +133,6 @@ export APPLE_TEAM_ID="TEAMID"
 | Mode B Codex | flags and event format **verified on codex-cli 0.167.2** (incl. `exec resume` under the same sandbox); a signed-in run not yet done | |
 | CI | `.github/workflows/ci.yml`: build, tests, clippy, audits on macOS and Windows | |
 
-Next: third-party agent adapters (any executable speaking a JSON-lines protocol), voice approvals, selected-text context, signed installers.
+Next: selected-text and screen context, a first-run setup guide, auto-update, notarized installers.
 
 Security: see [SECURITY.md](SECURITY.md).
