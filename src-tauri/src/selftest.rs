@@ -23,6 +23,10 @@ pub fn maybe_run() -> bool {
             }
             true
         }
+        Some("--selftest-permissions") => {
+            println!("{}", serde_json::to_string(&crate::permissions::status()).unwrap());
+            true
+        }
         Some("--selftest-agent") => {
             let kind = match args[2].as_str() {
                 "codex" => settings::AgentKind::Codex,

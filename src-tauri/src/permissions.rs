@@ -9,10 +9,66 @@ pub struct PermissionStatus {
     pub accessibility_required: bool,
     /// macOS: screenshots of other apps' windows ("Control my Mac" fallback only).
     pub screen_recording: bool,
+    pub microphone: Mic,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Mic {
+    Allowed,
+    NotAsked,
+    Denied,
 }
 
 pub fn status() -> PermissionStatus {
-    PermissionStatus { accessibility: accessibility_trusted(false), accessibility_required: cfg!(target_os = "macos"), screen_recording: screen_recording() }
+    PermissionStatus { accessibility: accessibility_trusted(false), accessibility_required: cfg!(target_os = "macos"), screen_recording: screen_recording(), microphone: microphone() }
+}
+
+#[cfg(target_os = "macos")]
+#[link(name = "AVFoundation", kind = "framework")]
+extern "C" {
+    static AVMediaTypeAudio: &'static objc2_foundation::NSString;
+}
+
+#[cfg(target_os = "macos")]
+pub fn microphone() -> Mic {
+    let status: isize = unsafe { objc2::msg_send![objc2::class!(AVCaptureDevice), authorizationStatusForMediaType: AVMediaTypeAudio] };
+    match status {
+        3 => Mic::Allowed,
+        0 => Mic::NotAsked,
+        _ => Mic::Denied,
+    }
+}
+#[cfg(not(target_os = "macos"))]
+pub fn microphone() -> Mic {
+    Mic::Allowed
+}
+
+#[cfg(target_os = "macos")]
+pub async fn request_microphone() -> bool {
+    if microphone() != Mic::NotAsked {
+        return microphone() == Mic::Allowed;
+    }
+    ask_microphone().await.unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+fn ask_microphone() -> tokio::sync::oneshot::Receiver<bool> {
+    let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
+    let tx = std::sync::Mutex::new(Some(tx));
+    let done = block2::RcBlock::new(move |granted: objc2::runtime::Bool| {
+        if let Some(tx) = tx.lock().ok().and_then(|mut t| t.take()) {
+            let _ = tx.send(granted.as_bool());
+        }
+    });
+    unsafe {
+        let _: () = objc2::msg_send![objc2::class!(AVCaptureDevice), requestAccessForMediaType: AVMediaTypeAudio, completionHandler: &*done];
+    }
+    rx
+}
+#[cfg(not(target_os = "macos"))]
+pub async fn request_microphone() -> bool {
+    true
 }
 
 #[cfg(target_os = "macos")]

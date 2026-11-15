@@ -65,6 +65,11 @@ pub fn permission_status() -> permissions::PermissionStatus {
 }
 
 #[tauri::command]
+pub async fn request_microphone() -> bool {
+    permissions::request_microphone().await
+}
+
+#[tauri::command]
 pub fn open_permission_settings(which: String) -> Result<()> {
     if which == "accessibility" {
         permissions::accessibility_trusted(true);
