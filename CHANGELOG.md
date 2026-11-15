@@ -2,6 +2,14 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
+## 0.5.0 (2026-11-15)
+
+### Changed
+- **A simpler Settings window.** A sidebar shows one page at a time: Get started, Talk, Speech, Mode, Apps, Activity, Memory and Routines. Get started shows how many steps are left and disappears when you're ready.
+- Settings are grouped rows with on/off switches, every explanation is one short line, and rarely used options sit under **More options**.
+- Shorter names: the modes are **Type**, **Agent** and **Control Mac**; speech models show their size and whether they're ready.
+- Light and dark themes, with the status (Ready, or steps left) and "Saved" in the sidebar.
+
 ## 0.4.1 (2026-11-15)
 
 ### Fixed
