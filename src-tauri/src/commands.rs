@@ -112,6 +112,18 @@ pub async fn pick_project(app: AppHandle) -> Result<Option<String>> {
 }
 
 #[tauri::command]
+pub async fn pick_custom_agent(app: AppHandle) -> Result<Option<String>> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().set_title("Choose the agent program (it reads the request on stdin)").pick_file(move |p| {
+        let _ = tx.send(p);
+    });
+    let Some(p) = rx.await.map_err(|_| msg("dialog closed"))? else { return Ok(None) };
+    let p = p.into_path().map_err(|_| msg("not a local file"))?;
+    Ok(Some(crate::agents::custom::validate_command(&p)?.display().to_string()))
+}
+
+#[tauri::command]
 pub fn claude_profiles() -> Vec<String> {
     settings::claude_profiles()
 }

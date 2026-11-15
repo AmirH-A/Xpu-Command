@@ -24,11 +24,16 @@ pub fn maybe_run() -> bool {
             true
         }
         Some("--selftest-agent") => {
-            let kind = if args[2] == "codex" { settings::AgentKind::Codex } else { settings::AgentKind::Claude };
+            let kind = match args[2].as_str() {
+                "codex" => settings::AgentKind::Codex,
+                "custom" => settings::AgentKind::Custom,
+                _ => settings::AgentKind::Claude,
+            };
+            let custom = std::env::var("XPU_CUSTOM").ok().map(std::path::PathBuf::from);
             let prompt = args[4..].join(" ");
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
-                let req = agents::Request { kind, prompt: &prompt, project: std::path::Path::new(&args[3]), safety: settings::Safety::Edit, resume: std::env::var("XPU_RESUME").ok().as_deref().map(|s| Box::leak(s.to_string().into_boxed_str()) as &str), timeout: std::time::Duration::from_secs(600), claude_config_dir: None, mac: None, approvals: None };
+                let req = agents::Request { kind, prompt: &prompt, project: std::path::Path::new(&args[3]), safety: settings::Safety::Edit, resume: std::env::var("XPU_RESUME").ok().as_deref().map(|s| Box::leak(s.to_string().into_boxed_str()) as &str), timeout: std::time::Duration::from_secs(600), claude_config_dir: None, mac: None, approvals: None, custom_bin: custom.as_deref() };
                 let profile = std::env::var("XPU_CLAUDE_PROFILE").ok().map(|p| settings::claude_profile_dir(&p).expect("bad profile"));
                 let req = agents::Request { claude_config_dir: profile.as_deref(), ..req };
                 let ask = std::env::var("XPU_SAFETY").as_deref() == Ok("ask");
@@ -292,6 +297,7 @@ fn mac_request(text: &str) {
             claude_config_dir: profile.as_deref(),
             mac: Some(agents::MacArgs { mcp_config: config.path(), model: &model, system_prompt: &prompt }),
             approvals: None,
+            custom_bin: None,
         };
         match agents::start(req) {
             Ok(mut run) => {

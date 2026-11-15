@@ -101,7 +101,7 @@
       </div>
       <div id="agent-box" hidden>
         <div class="row">
-          <label>Agent<select id="agent"><option value="claude">Claude Code</option><option value="codex">Codex</option></select></label>
+          <label>Agent<select id="agent"><option value="claude">Claude Code</option><option value="codex">Codex</option><option value="custom">Custom (any command-line agent)</option></select></label>
           <label>What it may do<select id="safety">
             <option value="ask_commands">Edit files; ask me before commands</option>
             <option value="edit">Edit files in the project (no commands)</option>
@@ -109,6 +109,13 @@
           </select></label>
         </div>
         <div class="agents" id="agents"></div>
+        <div id="custom-box" hidden>
+          <div class="row folder">
+            <div class="path" id="custom-path">No program chosen</div>
+            <button id="pick-custom">Choose program…</button>
+          </div>
+          <p class="note warn">A custom agent runs with your permissions in the project folder: Xpu Command passes the safety level (XPU_SAFETY) but can't enforce it. It gets the request on stdin and prints plain text, or JSON lines: {"type":"status","text":…}, {"type":"session","id":…}, {"type":"done","summary":…}. Shells and script interpreters can't be chosen; point to the agent itself or a script that starts it.</p>
+        </div>
         <div class="row folder">
           <div class="path" id="project">No project folder chosen</div>
           <button id="pick">Choose folder…</button>

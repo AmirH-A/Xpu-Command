@@ -45,6 +45,7 @@ mouse button (held) ─► microphone ─► speech-to-text ─► ┬─ Mode A
 - **Mode B, "send to an agent"** runs the agent headless in a folder you choose, shows what it's doing (*Reading auth.ts*, *Editing login.py*) and reads the result aloud.
   - **Voice approvals (Claude Code, "Edit files; ask me before commands", the default):** every command is asked in the pill and out loud. Answer "yes", "no" or "always", or press to allow; commands that delete, push, publish or run downloaded code need a spoken "yes".
   - **Conversation:** after the answer is read aloud it listens briefly for your reply ("now run the tests"); silence or "that's all" ends it.
+  - **Any other agent:** choose *Custom* and pick its program (Aider, Gemini CLI, your own script). It runs in the project folder, reads the request on stdin, gets `XPU_SAFETY` (read_only, edit, ask_commands) and `XPU_RESUME`, and prints plain text or JSON lines (`{"type":"status","text":…}`, `{"type":"session","id":…}`, `{"type":"done","summary":…}`, `{"type":"error","message":…}`). It runs with your permissions: the safety level is passed, not enforced. Shells and interpreters are refused, so speech can't run as code.
   - **Follow-ups continue the same conversation** for 30 minutes (Claude `--resume`, Codex `exec resume`).
   - Say **"stop"** to stop the agent, or **"new task"** to start fresh.
   - **Several Claude accounts?** Pick the profile (`~/.claude`, `~/.claude-work`, …) in Settings; it's passed as `CLAUDE_CONFIG_DIR`.

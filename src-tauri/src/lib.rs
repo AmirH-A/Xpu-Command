@@ -80,6 +80,7 @@ pub fn run() {
             commands::memory_add,
             commands::memory_remove,
             commands::memory_clear,
+            commands::pick_custom_agent,
             commands::routines_list,
             commands::routine_suggestions,
             commands::routine_save,

@@ -677,6 +677,7 @@ impl Controller {
             timeout: AGENT_TIMEOUT,
             claude_config_dir: profile.as_deref(),
             mac: None,
+            custom_bin: s.custom_agent.as_deref(),
             approvals: approvals.as_ref().map(|(_, c)| c.path()),
         })?;
         self.follow(app, run, Follow { name, project, continuing, speak: s.speak_summary, agent: s.agent, profile: s.claude_profile.clone() }, text, approvals);
@@ -763,6 +764,7 @@ impl Controller {
             claude_config_dir: profile.as_deref(),
             mac: Some(agents::MacArgs { mcp_config: config.path(), model: crate::mac::model_name(s.mac_model), system_prompt: &prompt }),
             approvals: None,
+            custom_bin: None,
         })?;
         let f = Follow { name: "Mac".into(), project: workspace, continuing: resume.is_some(), speak: s.speak_summary, agent: crate::settings::AgentKind::Claude, profile: s.claude_profile.clone() };
         self.follow(app, run, f, text, (server, config));

@@ -11,6 +11,7 @@
 pub mod approvals;
 pub mod claude;
 pub mod codex;
+pub mod custom;
 
 use crate::error::{msg, Result};
 use crate::settings::{AgentKind, Safety};
@@ -54,6 +55,7 @@ pub fn adapter(kind: AgentKind) -> &'static dyn Adapter {
     match kind {
         AgentKind::Claude => &claude::Claude,
         AgentKind::Codex => &codex::Codex,
+        AgentKind::Custom => &custom::Custom,
     }
 }
 
@@ -156,6 +158,7 @@ pub struct Request<'a> {
     pub mac: Option<MacArgs<'a>>,
     /// Claude with `Safety::AskCommands`: the MCP config of this run's approvals server.
     pub approvals: Option<&'a Path>,
+    pub custom_bin: Option<&'a Path>,
 }
 
 pub struct MacArgs<'a> {
@@ -165,7 +168,10 @@ pub struct MacArgs<'a> {
 }
 
 pub fn start(req: Request<'_>) -> Result<Run> {
-    let bin = find_binary(req.kind).ok_or_else(|| msg(format!("{} CLI not found; install it first", name(req.kind))))?;
+    let bin = match req.kind {
+        AgentKind::Custom => custom::validate_command(req.custom_bin.ok_or_else(|| msg("choose the custom agent program in Settings"))?)?,
+        k => find_binary(k).ok_or_else(|| msg(format!("{} CLI not found; install it first", name(k))))?,
+    };
     start_with(&bin, req)
 }
 
@@ -179,6 +185,7 @@ pub fn name(kind: AgentKind) -> &'static str {
     match kind {
         AgentKind::Claude => "Claude Code",
         AgentKind::Codex => "Codex",
+        AgentKind::Custom => "Custom agent",
     }
 }
 
@@ -209,6 +216,12 @@ pub fn start_with(bin: &Path, req: Request<'_>) -> Result<Run> {
         .kill_on_drop(true);
     if let (AgentKind::Claude, Some(dir)) = (kind, &claude_config_dir) {
         cmd.env("CLAUDE_CONFIG_DIR", dir);
+    }
+    if kind == AgentKind::Custom {
+        cmd.env("XPU_SAFETY", custom::safety_name(safety));
+        if let Some(id) = resume {
+            cmd.env("XPU_RESUME", id);
+        }
     }
     #[cfg(windows)]
     {
@@ -351,7 +364,7 @@ mod runner_tests {
         }
     }
     fn req<'a>(project: &'a Path, resume: Option<&'a str>, timeout: Duration) -> Request<'a> {
-        Request { kind: AgentKind::Claude, prompt: "secret spoken prompt", project, safety: Safety::Edit, resume, timeout, claude_config_dir: None, mac: None, approvals: None }
+        Request { kind: AgentKind::Claude, prompt: "secret spoken prompt", project, safety: Safety::Edit, resume, timeout, claude_config_dir: None, mac: None, approvals: None, custom_bin: None }
     }
     async fn collect(mut run: Run) -> Vec<AgentEvent> {
         let mut v = Vec::new();
@@ -403,6 +416,35 @@ echo '{"type":"result","subtype":"success","is_error":false,"result":"Renamed th
         r.claude_config_dir = Some(&profile);
         collect(start_with(&bin, r).unwrap()).await;
         assert_eq!(std::fs::read_to_string(project.join("profile.txt")).unwrap().trim(), profile.display().to_string());
+    }
+
+    #[tokio::test]
+    async fn a_custom_agent_gets_the_prompt_safety_and_session() {
+        let (_f, bin, project) = fixture(
+            r#"cat > "$PWD/stdin.txt"; echo "$XPU_SAFETY $XPU_RESUME" > "$PWD/env.txt"
+echo '{"type":"session","id":"abc12345-6789"}'
+echo '{"type":"status","text":"Reading the code"}'
+echo 'Renamed the function.'
+echo 'Tests pass.'"#,
+        );
+        let mut r = req(&project, Some("prev-1234567"), Duration::from_secs(10));
+        r.kind = AgentKind::Custom;
+        r.safety = Safety::ReadOnly;
+        r.custom_bin = Some(&bin);
+        let ev = collect(start(r).unwrap()).await;
+        assert_eq!(
+            ev,
+            vec![
+                AgentEvent::Session { id: "abc12345-6789".into() },
+                AgentEvent::Status { text: "Reading the code".into() },
+                AgentEvent::Done { summary: "Renamed the function. Tests pass.".into() },
+            ]
+        );
+        assert!(std::fs::read_to_string(project.join("stdin.txt")).unwrap().ends_with("Request:\nsecret spoken prompt\n"));
+        assert_eq!(std::fs::read_to_string(project.join("env.txt")).unwrap().trim(), "read_only prev-1234567");
+        let mut r = req(&project, None, Duration::from_secs(10));
+        r.kind = AgentKind::Custom;
+        assert!(start(r).is_err(), "no program chosen");
     }
 
     #[tokio::test]

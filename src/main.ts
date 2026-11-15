@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 
 type Settings = {
   button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; airpods: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
-  delivery: 'type_into_focused' | 'agent' | 'control_mac'; agent: 'claude' | 'codex'; project_dir: string | null; safety: 'read_only' | 'edit' | 'ask_commands'; conversation: boolean; memory: boolean;
+  delivery: 'type_into_focused' | 'agent' | 'control_mac'; agent: 'claude' | 'codex' | 'custom'; custom_agent: string | null; project_dir: string | null; safety: 'read_only' | 'edit' | 'ask_commands'; conversation: boolean; memory: boolean;
   speak_summary: boolean; auto_submit: boolean; max_record_seconds: number; input_device: string | null; claude_profile: string | null; mac_model: 'haiku' | 'sonnet'; app_access: Record<string, Access>; allow_all_apps: boolean; step_by_step: boolean;
 };
 type ModelRow = { id: string; label: string; downloaded: boolean };
@@ -44,6 +44,8 @@ function render() {
   $('cloud-box').hidden = s.stt !== 'cloud';
   $('type-box').hidden = s.delivery !== 'type_into_focused';
   $('agent-box').hidden = s.delivery !== 'agent';
+  $('custom-box').hidden = s.agent !== 'custom';
+  $('custom-path').textContent = s.custom_agent ?? 'No program chosen';
   $('mac-box').hidden = s.delivery !== 'control_mac';
   $('claude-box').hidden = s.delivery === 'type_into_focused';
   $('profile-row').hidden = s.delivery === 'agent' && s.agent !== 'claude';
@@ -371,6 +373,12 @@ async function init() {
     try { await invoke('activity_clear'); await refreshActivity(); flash('Activity cleared'); } catch (e) { flash(String(e), true); }
   };
   $('grant-ax').onclick = () => invoke('open_permission_settings', { which: 'accessibility' });
+  $('pick-custom').onclick = async () => {
+    try {
+      const p = await invoke<string | null>('pick_custom_agent');
+      if (p) { s.custom_agent = p; render(); }
+    } catch (e) { flash(String(e), true); }
+  };
   $('pick').onclick = async () => {
     try {
       const p = await invoke<string | null>('pick_project');

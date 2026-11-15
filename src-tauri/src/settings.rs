@@ -66,6 +66,7 @@ pub enum MacModel {
 pub enum AgentKind {
     Claude,
     Codex,
+    Custom,
 }
 
 /// What an agent may do. There is deliberately no "bypass" level.
@@ -102,6 +103,7 @@ pub struct Settings {
     pub language: String,
     pub delivery: Delivery,
     pub agent: AgentKind,
+    pub custom_agent: Option<PathBuf>,
     pub project_dir: Option<PathBuf>,
     pub safety: Safety,
     pub speak_summary: bool,
@@ -141,6 +143,7 @@ impl Default for Settings {
             language: "en".into(),
             delivery: Delivery::TypeIntoFocused,
             agent: AgentKind::Claude,
+            custom_agent: None,
             project_dir: None,
             safety: Safety::AskCommands,
             speak_summary: true,
@@ -180,6 +183,9 @@ impl Settings {
         }
         if let Some(dir) = &self.project_dir {
             validate_project_dir(dir)?;
+        }
+        if self.custom_agent.as_ref().is_some_and(|p| !p.is_absolute()) {
+            return Err(msg("the custom agent must be an absolute path"));
         }
         if let Some(p) = &self.claude_profile {
             claude_profile_dir(p)?;
