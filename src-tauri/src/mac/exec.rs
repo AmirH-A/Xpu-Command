@@ -7,6 +7,7 @@ use super::policy::{Access, Policy, Target};
 use super::server::{Exec, Output};
 use super::tools::{Call, MediaAction, Player};
 use super::ui;
+use super::undo::{self, Step};
 use chrono::{Datelike, NaiveDateTime, Timelike};
 use std::io::Read;
 use std::process::{Command, Stdio};
@@ -18,11 +19,12 @@ pub struct MacExec {
     session: ui::Session,
     policy: Policy,
     shots_dir: std::path::PathBuf,
+    request: u64,
 }
 
 impl MacExec {
     pub fn new(policy: Policy, shots_dir: std::path::PathBuf) -> Self {
-        Self { session: ui::Session::default(), policy, shots_dir }
+        Self { session: ui::Session::default(), policy, shots_dir, request: undo::next_request() }
     }
 
     /// For window calls: the app named in the call, checked to be the same process the gate saw.
@@ -97,7 +99,7 @@ impl Exec for MacExec {
             Call::ChooseMenu { app, path } => t(self.session.choose_menu(&self.same_app(app, target)?, path)?),
             Call::Scroll { app, down, amount } => t(self.session.scroll(&self.same_app(app, target)?, *down, *amount)?),
             Call::ClickAt { app, x, y } => t(self.session.click_at(&self.same_app(app, target)?, *x, *y)?),
-            other => run_action(other).map(Output::Text),
+            other => run_action(other, self.request).map(Output::Text),
         }
     }
 }
@@ -107,7 +109,7 @@ const OSASCRIPT: &str = "/usr/bin/osascript";
 const SHORTCUTS: &str = "/usr/bin/shortcuts";
 
 /// The fixed actions (apps, links, media, reminders…): no window involved.
-fn run_action(call: &Call) -> Result<String, String> {
+fn run_action(call: &Call, request: u64) -> Result<String, String> {
         match call {
             Call::ListApps => {
                 let names: Vec<String> = apps::installed().into_iter().map(|a| a.name).take(400).collect();
@@ -116,14 +118,22 @@ fn run_action(call: &Call) -> Result<String, String> {
             Call::OpenApp { name } => {
                 let all = apps::installed();
                 let app = apps::find(&all, name)?;
+                let was_running = is_running(&app.name);
                 run_program(OPEN, &["-a".as_ref(), app.path.as_os_str()], Duration::from_secs(15))?;
+                if !was_running {
+                    undo::push(request, format!("closed {}", app.name), Step::QuitApp { name: app.name.clone() });
+                }
                 Ok(format!("Opened {}", app.name))
             }
             Call::QuitApp { name } => {
                 let all = apps::installed();
                 let app = apps::find(&all, name)?;
                 let r = osascript(QUIT, &[&app.name], "the app")?;
-                Ok(if r == "quit" { format!("Quit {}", app.name) } else { format!("{} wasn't running", app.name) })
+                if r != "quit" {
+                    return Ok(format!("{} wasn't running", app.name));
+                }
+                undo::push(request, format!("reopened {}", app.name), Step::OpenApp { name: app.name.clone(), path: app.path.clone() });
+                Ok(format!("Quit {}", app.name))
             }
             Call::OpenUrl { url } => {
                 run_program(OPEN, &[url.as_str().as_ref()], Duration::from_secs(15))?;
@@ -141,11 +151,17 @@ fn run_action(call: &Call) -> Result<String, String> {
                     MediaAction::Next => "next",
                     MediaAction::Previous => "previous",
                 };
-                let (script, app) = match pick_player(*player)? {
+                let p = pick_player(*player)?;
+                let (script, app) = match p {
                     Player::Spotify => (MEDIA_SPOTIFY, "Spotify"),
                     Player::Music => (MEDIA_MUSIC, "Music"),
                 };
                 let now = osascript(script, &[a], app)?;
+                match action {
+                    MediaAction::Play => undo::push(request, format!("paused {app}"), Step::Media { play: false, player: p }),
+                    MediaAction::Pause => undo::push(request, format!("resumed {app}"), Step::Media { play: true, player: p }),
+                    MediaAction::Next | MediaAction::Previous => {}
+                }
                 Ok(if now.is_empty() { format!("{app}: {a}") } else { format!("{app}: {a}. Now: {now}") })
             }
             Call::PlayMusic { query, player } => match pick_player(*player)? {
@@ -170,11 +186,20 @@ fn run_action(call: &Call) -> Result<String, String> {
                     (None, Some(false)) => "unmute",
                     _ => "level",
                 };
+                let before = osascript(GET_VOLUME, &[], "the volume").ok().and_then(|b| parse_volume(&b));
                 let v = osascript(VOLUME, &[mode, &lvl], "the volume")?;
+                if let Some((level, muted)) = before {
+                    let what = format!("set the volume back to {level}%{}", if muted { ", muted" } else { "" });
+                    undo::push(request, what, Step::Volume { level, muted });
+                }
                 Ok(if mode == "mute" { "Muted".into() } else { format!("Volume is {v}%") })
             }
             Call::DarkMode { on } => {
+                let before = osascript(GET_DARK_MODE, &[], "System Events").ok().map(|b| b == "true");
                 osascript(DARK_MODE, &[if *on { "on" } else { "off" }], "System Events")?;
+                if let Some(was) = before.filter(|was| was != on) {
+                    undo::push(request, format!("turned dark mode {}", if was { "back on" } else { "back off" }), Step::DarkMode { on: was });
+                }
                 Ok(format!("Dark mode {}", if *on { "on" } else { "off" }))
             }
             Call::ListShortcuts => Ok(shortcuts()?.join(", ")),
@@ -187,18 +212,29 @@ fn run_action(call: &Call) -> Result<String, String> {
             Call::CreateReminder { title, due, notes } => {
                 let mut a: Vec<String> = vec![title.clone(), notes.clone().unwrap_or_default(), if due.is_some() { "1" } else { "0" }.into()];
                 a.extend(parts(due.as_ref()));
-                let list = osascript(&REMINDER, &a.iter().map(String::as_str).collect::<Vec<_>>(), "Reminders")?;
+                let out = osascript(&REMINDER, &a.iter().map(String::as_str).collect::<Vec<_>>(), "Reminders")?;
+                let (list, id) = split_created(&out);
+                if let Some(id) = id {
+                    undo::push(request, format!("deleted the reminder \"{title}\""), Step::DeleteReminder { id });
+                }
                 Ok(format!("Created the reminder in \"{list}\""))
             }
             Call::CreateEvent { title, start, end, location } => {
                 let mut a: Vec<String> = vec![title.clone(), location.clone().unwrap_or_default()];
                 a.extend(parts(Some(start)));
                 a.extend(parts(Some(end)));
-                let cal = osascript(&EVENT, &a.iter().map(String::as_str).collect::<Vec<_>>(), "Calendar")?;
+                let out = osascript(&EVENT, &a.iter().map(String::as_str).collect::<Vec<_>>(), "Calendar")?;
+                let (cal, uid) = split_created(&out);
+                if let Some(uid) = uid {
+                    undo::push(request, format!("deleted the event \"{title}\""), Step::DeleteEvent { uid, calendar: cal.clone() });
+                }
                 Ok(format!("Created the event in the \"{cal}\" calendar"))
             }
             Call::CreateNote { title, body } => {
-                osascript(NOTE, &[&note_html(title, body)], "Notes")?;
+                let id = osascript(NOTE, &[&note_html(title, body)], "Notes")?;
+                if !id.is_empty() {
+                    undo::push(request, format!("deleted the note \"{title}\""), Step::DeleteNote { id });
+                }
                 Ok("Created the note".into())
             }
             Call::DraftEmail { to, subject, body } => {
@@ -209,6 +245,51 @@ fn run_action(call: &Call) -> Result<String, String> {
             }
             other => Err(format!("{} needs a window", other.tool())),
         }
+}
+
+pub fn undo_last() -> String {
+    let (mut undone, mut failed) = (Vec::new(), Vec::new());
+    for e in undo::take_last_request() {
+        match revert(&e.step) {
+            Ok(()) => undone.push(e.what),
+            Err(err) => {
+                log::info!("undo {:?}: {err}", e.step);
+                failed.push(e.what);
+            }
+        }
+    }
+    undo::summary(&undone, &failed)
+}
+
+fn revert(step: &Step) -> Result<(), String> {
+    match step {
+        Step::QuitApp { name } => osascript(QUIT, &[name], name).map(drop),
+        Step::OpenApp { path, .. } => run_program(OPEN, &["-a".as_ref(), path.as_os_str()], Duration::from_secs(15)).map(drop),
+        Step::Volume { level, muted } => osascript(RESTORE_VOLUME, &[&level.to_string(), if *muted { "true" } else { "false" }], "the volume").map(drop),
+        Step::DarkMode { on } => osascript(DARK_MODE, &[if *on { "on" } else { "off" }], "System Events").map(drop),
+        Step::Media { play, player } => {
+            let (script, app) = match player {
+                Player::Spotify => (MEDIA_SPOTIFY, "Spotify"),
+                Player::Music => (MEDIA_MUSIC, "Music"),
+            };
+            osascript(script, &[if *play { "play" } else { "pause" }], app).map(drop)
+        }
+        Step::DeleteReminder { id } => osascript(DELETE_REMINDER, &[id], "Reminders").map(drop),
+        Step::DeleteEvent { uid, calendar } => osascript(DELETE_EVENT, &[uid, calendar], "Calendar").map(drop),
+        Step::DeleteNote { id } => osascript(DELETE_NOTE, &[id], "Notes").map(drop),
+    }
+}
+
+fn split_created(out: &str) -> (String, Option<String>) {
+    match out.split_once('\n') {
+        Some((name, id)) if !id.trim().is_empty() => (name.trim().to_string(), Some(id.trim().to_string())),
+        _ => (out.trim().to_string(), None),
+    }
+}
+
+fn parse_volume(s: &str) -> Option<(u8, bool)> {
+    let (level, muted) = s.split_once(',')?;
+    Some((level.trim().parse::<u8>().ok()?.min(100), muted.trim() == "true"))
 }
 
 /// Year, month, day, hour, minute as separate arguments: AppleScript builds the date from numbers,
@@ -438,7 +519,7 @@ const REMINDER_BODY: &str = r#"on run argv
       set due date of r to d
       set remind me date of r to d
     end if
-    return name of l
+    return (name of l) & linefeed & (id of r)
   end tell
 end run"#;
 
@@ -455,14 +536,52 @@ const EVENT_BODY: &str = r#"on run argv
       set ev to make new event with properties {summary:t, start date:s, end date:e}
     end tell
     if loc is not "" then set location of ev to loc
-    return name of c
+    return (name of c) & linefeed & (uid of ev)
   end tell
 end run"#;
 
 const NOTE: &str = r#"on run argv
   tell application "Notes"
-    make new note with properties {body:(item 1 of argv)}
+    set n to make new note with properties {body:(item 1 of argv)}
+    return id of n
   end tell
+end run"#;
+
+const GET_VOLUME: &str = r#"on run argv
+  set v to get volume settings
+  return ((output volume of v) as text) & "," & ((output muted of v) as text)
+end run"#;
+
+const RESTORE_VOLUME: &str = r#"on run argv
+  set volume output volume ((item 1 of argv) as integer)
+  if (item 2 of argv) is "true" then
+    set volume with output muted
+  else
+    set volume without output muted
+  end if
+  return ""
+end run"#;
+
+const GET_DARK_MODE: &str = r#"on run argv
+  tell application "System Events" to tell appearance preferences to return (dark mode) as text
+end run"#;
+
+const DELETE_REMINDER: &str = r#"on run argv
+  tell application "Reminders" to delete reminder id (item 1 of argv)
+  return ""
+end run"#;
+
+const DELETE_EVENT: &str = r#"on run argv
+  tell application "Calendar"
+    tell calendar (item 2 of argv)
+      delete (every event whose uid is (item 1 of argv))
+    end tell
+  end tell
+  return ""
+end run"#;
+
+const DELETE_NOTE: &str = r#"on run argv
+  tell application "Notes" to delete note id (item 1 of argv)
   return ""
 end run"#;
 
@@ -490,7 +609,10 @@ mod tests {
     use super::*;
 
     fn all_scripts() -> Vec<&'static str> {
-        vec![QUIT, MEDIA_MUSIC, MEDIA_SPOTIFY, PLAY_MUSIC, VOLUME, DARK_MODE, &REMINDER, &EVENT, NOTE, MAIL_DRAFT]
+        vec![
+            QUIT, MEDIA_MUSIC, MEDIA_SPOTIFY, PLAY_MUSIC, VOLUME, DARK_MODE, &REMINDER, &EVENT, NOTE, MAIL_DRAFT, GET_VOLUME, RESTORE_VOLUME, GET_DARK_MODE, DELETE_REMINDER,
+            DELETE_EVENT, DELETE_NOTE,
+        ]
     }
 
     #[test]
@@ -517,6 +639,16 @@ mod tests {
             let _ = std::fs::remove_file(&f);
             assert!(r.is_ok(), "script {i} does not compile: {r:?}\n{src}");
         }
+    }
+
+    #[test]
+    fn created_ids_and_volume_are_parsed() {
+        assert_eq!(split_created("Reminders\nx-apple-reminder://ABC"), ("Reminders".into(), Some("x-apple-reminder://ABC".into())));
+        assert_eq!(split_created("Home"), ("Home".into(), None));
+        assert_eq!(split_created("Home\n  "), ("Home".into(), None));
+        assert_eq!(parse_volume("44,false"), Some((44, false)));
+        assert_eq!(parse_volume("12,true"), Some((12, true)));
+        assert_eq!(parse_volume("missing value,missing value"), None);
     }
 
     #[test]

@@ -9,6 +9,7 @@ pub mod exec;
 pub mod policy;
 pub mod server;
 pub mod tools;
+pub mod undo;
 #[cfg(target_os = "macos")]
 pub mod ui;
 

@@ -73,6 +73,8 @@ pub fn run() {
             commands::app_access_list,
             commands::request_screen_recording,
             commands::activity_clear,
+            commands::undo_preview,
+            commands::undo_last,
         ])
         .setup(move |app| {
             #[cfg(target_os = "macos")]

@@ -53,6 +53,7 @@ mouse button (held) ─► microphone ─► speech-to-text ─► ┬─ Mode A
   - Reminders, events, notes, drafts and quitting apps: shown first, **press or knock within 3 s to cancel**. Shortcuts: **press or knock to allow**. Nothing is ever sent, deleted or bought.
   - **Works inside apps you allow** (Settings › App access: Off / See / Control / Ask each time; Off by default). It reads windows through macOS Accessibility (real buttons and fields, numbered), clicks, types, uses menus and keys; screenshots are a fallback. A glowing outline marks the window it is working on.
   - Every action is in **Settings › Activity**. Debug: `xpu-command --selftest-mac "open calculator"`.
+  - **Say "undo that"** (or press Undo in Activity) within 30 minutes to reverse the last request: apps it opened are closed, apps it quit reopen, the reminders, events and notes it made are deleted, and volume, dark mode and music go back.
 - **Two triggers:** a mouse button, or a keyboard shortcut (default **⌃⌥Space**) for trackpads. Hold, speak, release.
 - **Listening:** after a click (toggle mode) or a double knock it sends when you stop talking (1.5 s of quiet) and cancels if you say nothing. Silence is trimmed before transcription, the stop knock is cut off, and Whisper's phantom phrases ("Thank you.") are dropped. Soft sound cues mark start, send and cancel.
 - **AirPods:** press once to talk (Settings › Talk button › Press AirPods to talk). Double and triple press still skip tracks in Spotify or Music.

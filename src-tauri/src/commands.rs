@@ -170,6 +170,16 @@ pub fn activity_recent() -> Vec<crate::activity::Entry> {
 }
 
 #[tauri::command]
+pub fn undo_preview() -> Vec<String> {
+    crate::mac::undo::peek_last_request()
+}
+
+#[tauri::command]
+pub async fn undo_last(ctl: Ctl<'_>) -> Result<String> {
+    Ok(ctl.undo().await)
+}
+
+#[tauri::command]
 pub fn activity_clear() -> Result<()> {
     crate::activity::clear().map_err(Into::into)
 }

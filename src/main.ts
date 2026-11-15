@@ -147,7 +147,15 @@ function renderApps() {
   }));
 }
 
+async function refreshUndo() {
+  const what = await invoke<string[]>('undo_preview');
+  const btn = $<HTMLButtonElement>('undo');
+  btn.disabled = what.length === 0;
+  $('undo-what').textContent = what.length ? `Undo would: ${what.join(', ')}` : '';
+}
+
 async function refreshActivity() {
+  await refreshUndo();
   const rows = await invoke<ActivityEntry[]>('activity_recent');
   const list = $('activity');
   if (!rows.length) {
@@ -234,6 +242,9 @@ async function init() {
   await refreshStatus();
   setInterval(refreshStatus, 4000);
 
+  $('undo').onclick = async () => {
+    try { flash(await invoke<string>('undo_last')); await refreshActivity(); } catch (e) { flash(String(e), true); }
+  };
   $('activity-clear').onclick = async () => {
     try { await invoke('activity_clear'); await refreshActivity(); flash('Activity cleared'); } catch (e) { flash(String(e), true); }
   };

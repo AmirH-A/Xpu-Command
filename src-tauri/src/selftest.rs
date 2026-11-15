@@ -77,6 +77,10 @@ pub fn maybe_run() -> bool {
                 run_tool(&exec, &tool, &v);
                 std::thread::sleep(std::time::Duration::from_millis(400));
             }
+            if std::env::var("XPU_UNDO").is_ok_and(|v| v == "1") {
+                println!("── undo");
+                println!("{}", crate::mac::exec::undo_last());
+            }
             true
         }
         #[cfg(target_os = "macos")]

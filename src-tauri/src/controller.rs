@@ -78,6 +78,7 @@ pub enum VoiceCommand {
     NewTask,
     /// "That's all": nothing more, close the conversation.
     Done,
+    Undo,
 }
 
 /// Short spoken commands. Only an utterance that is *just* the command counts.
@@ -86,6 +87,7 @@ pub fn voice_command(text: &str) -> Option<VoiceCommand> {
     match t.trim() {
         "stop" | "stop it" | "cancel" | "stop the agent" => Some(VoiceCommand::Stop),
         "new task" | "new session" | "start over" | "new conversation" => Some(VoiceCommand::NewTask),
+        "undo" | "undo that" | "undo it" | "undo the last one" | "take that back" | "revert that" => Some(VoiceCommand::Undo),
         "that's all" | "thats all" | "that is all" | "that's it" | "thats it" | "no thanks" | "nothing" | "never mind" | "nevermind" | "all good" | "i'm done" | "im done" | "done" => {
             Some(VoiceCommand::Done)
         }
@@ -538,6 +540,15 @@ impl Controller {
                     self.overlay(app, Phase::Hidden, "", None);
                     return Ok(());
                 }
+                Some(VoiceCommand::Undo) => {
+                    let said = self.undo().await;
+                    self.overlay(app, Phase::Done, &said, Some("Undo"));
+                    if s.speak_summary {
+                        speech::speak(said);
+                    }
+                    self.hide_later(app, Duration::from_secs(3));
+                    return Ok(());
+                }
                 Some(VoiceCommand::NewTask) => {
                     self.session.lock().take();
                     self.overlay(app, Phase::Done, "New conversation: the next request starts fresh", None);
@@ -648,6 +659,24 @@ impl Controller {
         })?;
         self.follow(app, run, Follow { name, project, continuing, speak: s.speak_summary, agent: s.agent, profile: s.claude_profile.clone() }, text, approvals);
         Ok(())
+    }
+
+    pub async fn undo(&self) -> String {
+        if self.agent_cancel.lock().is_some() {
+            return "Still working on the last request; say \"stop\" first".into();
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let said = tokio::task::spawn_blocking(crate::mac::exec::undo_last).await.unwrap_or_else(|_| "Undo failed".into());
+            if said != crate::mac::undo::summary(&[], &[]) {
+                crate::activity::record("undo", &said, crate::mac::server::Outcome::Done, "");
+            }
+            said
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            crate::mac::undo::summary(&[], &[])
+        }
     }
 
     /// "Control my Mac": start this request's tool server, then Claude Code with only those tools.
@@ -855,6 +884,8 @@ mod tests {
         assert_eq!(voice_command(" cancel! "), Some(VoiceCommand::Stop));
         assert_eq!(voice_command("New task."), Some(VoiceCommand::NewTask));
         assert_eq!(voice_command("Start over"), Some(VoiceCommand::NewTask));
+        assert_eq!(voice_command("Undo that."), Some(VoiceCommand::Undo));
+        assert_eq!(voice_command("undo the reminder and open notes"), None);
         assert_eq!(voice_command("stop using the old API and add a test"), None, "a request mentioning stop is a request");
         assert_eq!(voice_command(""), None);
     }
