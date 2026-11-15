@@ -59,8 +59,9 @@ function render() {
   renderApps();
   $('project').textContent = s.project_dir ?? 'No project folder chosen';
   const m = models.find((x) => x.id === s.local_model);
-  $('model-state').textContent = m?.downloaded ? 'Downloaded and ready' : 'Not downloaded yet';
-  $<HTMLButtonElement>('download').hidden = !!m?.downloaded;
+  const size = m?.label.match(/\((\d+ MB)/)?.[1] ?? '';
+  $('model-state').textContent = `${size ? `${size} · ` : ''}${m?.downloaded ? 'ready' : 'not downloaded'}`;
+  $('download-row').hidden = !!m?.downloaded;
   number();
   renderSetup();
 }
@@ -82,14 +83,20 @@ function scheduleSave() {
   }, 400);
 }
 
+let page = '';
+
+function showPage(id: string) {
+  page = id;
+  document.querySelectorAll<HTMLElement>('main > .page').forEach((p) => p.classList.toggle('shown', p.id === id));
+  document.querySelectorAll<HTMLElement>('#pages a').forEach((a) => a.classList.toggle('on', a.dataset.page === id));
+  document.querySelector('main')?.scrollTo(0, 0);
+}
+
 function number() {
-  let i = 0;
-  document.querySelectorAll<HTMLElement>('main > section.card:not(.setup)').forEach((card) => {
-    const span = card.querySelector('h2 span');
-    if (!card.hidden && span) span.textContent = String(++i).padStart(2, '0');
-    const link = document.querySelector<HTMLElement>(`nav#sections a[href="#${card.id}"]`);
-    if (link) link.hidden = card.hidden;
+  document.querySelectorAll<HTMLElement>('#pages a').forEach((a) => {
+    a.hidden = $(a.dataset.page!).hidden;
   });
+  if (page && $(page).hidden) showPage('talk-card');
 }
 
 type Perms = { accessibility: boolean; accessibility_required: boolean; screen_recording: boolean; microphone: 'allowed' | 'not_asked' | 'denied'; needs_move: boolean };
@@ -103,29 +110,32 @@ function renderSetup() {
   const model = models.find((x) => x.id === s.local_model);
   const speechReady = s.stt === 'cloud' ? hasKey : !!model?.downloaded;
   const move = p.needs_move ? [{
-    done: false, title: 'Move Xpu Command to Applications', why: "It's running from the download, so macOS forgets its permissions every time. This moves it, replaces any older copy, and reopens it.",
+    done: false, title: 'Move to Applications', why: "It's running from the download, so macOS keeps forgetting its permissions.",
     label: 'Move and reopen', act: async () => { flash('Moving to Applications…'); await invoke('move_to_applications'); },
   }] : [];
   const steps: { done: boolean; title: string; why: string; label: string; act: () => void }[] = [
     ...move,
     {
       done: !p.accessibility_required || p.accessibility, title: 'Allow Accessibility',
-      why: 'So the talk button works and Xpu Command can type for you. Already switched on? Press the button anyway: it clears the old entry, then switch Xpu Command on again.',
+      why: 'So the talk button works. Already on? Press anyway, then switch it on again.',
       label: 'Open settings', act: () => invoke('open_permission_settings', { which: 'accessibility' }),
     },
     {
-      done: p.microphone === 'allowed', title: 'Allow the microphone', why: p.microphone === 'denied' ? 'It is turned off. Press Allow, then choose Allow when macOS asks.' : 'So Xpu Command can hear you.',
+      done: p.microphone === 'allowed', title: 'Allow the microphone', why: p.microphone === 'denied' ? 'It is off. Press Allow, then Allow again when macOS asks.' : 'So Xpu Command can hear you.',
       label: 'Allow',
       act: async () => { await invoke('request_microphone'); await refreshStatus(); },
     },
     {
       done: speechReady, title: s.stt === 'cloud' ? 'Add your OpenAI key' : 'Download the speech model', why: s.stt === 'cloud' ? 'Under Speech to text.' : `${model?.label ?? 'The model'}: one time, then it works offline.`,
       label: s.stt === 'cloud' ? 'Show me' : 'Download',
-      act: () => { if (s.stt === 'cloud') $('speech-card').scrollIntoView(); else $('download').click(); },
+      act: () => { if (s.stt === 'cloud') showPage('speech-card'); else $('download').click(); },
     },
   ];
   const left = steps.filter((x) => !x.done).length;
   $('setup-card').hidden = left === 0;
+  $('setup-count').textContent = left ? String(left) : '';
+  if (!page) showPage(left ? 'setup-card' : 'talk-card');
+  number();
   $('steps').replaceChildren(...steps.map((st, i) => {
     const li = document.createElement('li');
     li.className = st.done ? 'done' : '';
@@ -157,7 +167,7 @@ function renderSetup() {
 async function refreshModels() {
   models = await invoke<ModelRow[]>('model_status');
   const sel = $<HTMLSelectElement>('local_model');
-  sel.replaceChildren(...models.map((m) => { const o = document.createElement('option'); o.value = m.id; o.textContent = m.label + (m.downloaded ? '  ✓' : ''); return o; }));
+  sel.replaceChildren(...models.map((m) => { const o = document.createElement('option'); o.value = m.id; o.textContent = m.label.split(' (')[0] + (m.downloaded ? '  ✓' : ''); return o; }));
   sel.value = s.local_model;
 }
 
@@ -342,7 +352,7 @@ async function refreshUndo() {
   const what = await invoke<string[]>('undo_preview');
   const btn = $<HTMLButtonElement>('undo');
   btn.disabled = what.length === 0;
-  $('undo-what').textContent = what.length ? `Undo would: ${what.join(', ')}` : '';
+  $('undo-what').textContent = what.length ? `Last request: ${what.join(', ')}` : '';
 }
 
 async function refreshActivity() {
@@ -377,12 +387,12 @@ async function refreshStatus() {
   const p = await invoke<Perms>('permission_status');
   perms = p;
   hasKey = await invoke<boolean>('has_cloud_key');
-  $('screen-state').textContent = p.screen_recording ? 'Screenshots: allowed' : 'Screenshots: not allowed (optional)';
+  $('screen-state').textContent = p.screen_recording ? 'Allowed' : "Optional, for apps that can't be read";
   $<HTMLButtonElement>('grant-screen').hidden = p.screen_recording;
   renderSetup();
   const knockErr = await invoke<string | null>('knock_status');
   $('knock-state').textContent = knockErr ? `Double knock is not available: ${knockErr}` : '';
-  $('knock-state').className = `note${knockErr ? ' warn' : ''}`;
+  $('knock-state').className = `hint${knockErr ? ' warn' : ''}`;
   await refreshActivity();
   const agents = await invoke<AgentInfo[]>('agent_status');
   $('agents').replaceChildren(...agents.map((a) => {
@@ -404,6 +414,7 @@ function flash(msg: string, err = false) {
 }
 
 async function init() {
+  document.querySelectorAll<HTMLElement>('#pages a').forEach((a) => { a.onclick = () => showPage(a.dataset.page!); });
   s = await invoke<Settings>('get_settings');
   savedJson = JSON.stringify(s);
   await refreshModels();

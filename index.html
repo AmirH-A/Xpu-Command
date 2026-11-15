@@ -7,185 +7,180 @@
   <link rel="stylesheet" href="/src/main.css" />
 </head>
 <body>
-  <header>
-    <div class="brand"><span class="logo">X</span><div><h1>Xpu Command</h1><p>Hold a mouse button, talk to your AI agent.</p></div></div>
-    <div class="head-right"><span class="saved" id="saved"></span><span class="status" id="status">…</span></div>
-  </header>
-  <nav id="sections">
-    <a href="#talk-card">Talk</a><a href="#speech-card">Speech</a><a href="#words-card">Words go to</a><a href="#access-card">App access</a><a href="#activity-card">Activity</a><a href="#memory-card">Memory</a><a href="#routines-card">Routines</a>
-  </nav>
+  <aside class="side">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7a62ff"/><stop offset="1" stop-color="#4a8cff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="15" fill="url(#lg)"/><path d="M21 21l22 22M43 21L21 43" stroke="#fff" stroke-width="8" stroke-linecap="round"/></svg>
+      <b>Xpu Command</b>
+    </div>
+    <nav id="pages">
+      <a data-page="setup-card" class="setup-link"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Get started<em id="setup-count"></em></a>
+      <a data-page="talk-card"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Talk</a>
+      <a data-page="speech-card"><svg viewBox="0 0 24 24"><path d="M4 12h2M8 8v8M12 5v14M16 9v6M20 11v2"/></svg>Speech</a>
+      <a data-page="words-card"><svg viewBox="0 0 24 24"><path d="M4 7h11M4 12h16M4 17h8M17 4l3 3-3 3"/></svg>Mode</a>
+      <a data-page="access-card"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>Apps</a>
+      <a data-page="activity-card"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Activity</a>
+      <a data-page="memory-card"><svg viewBox="0 0 24 24"><path d="M12 4a5 5 0 0 0-5 5c0 2 1 3 2 4v3h6v-3c1-1 2-2 2-4a5 5 0 0 0-5-5zM10 19h4"/></svg>Memory</a>
+      <a data-page="routines-card"><svg viewBox="0 0 24 24"><path d="M5 7h10M5 12h14M5 17h7"/><path d="M17 15l3 2-3 2z"/></svg>Routines</a>
+    </nav>
+    <div class="side-foot"><span class="status" id="status">…</span><span class="saved" id="saved"></span></div>
+  </aside>
 
   <main>
-    <section class="card setup" id="setup-card" hidden>
-      <h2>Get started</h2>
+    <section class="page" id="setup-card" hidden>
+      <header><h1>Get started</h1><p>A few steps, once.</p></header>
       <ol class="steps" id="steps"></ol>
-      <p class="note" id="try-it"></p>
+      <p class="hint" id="try-it"></p>
     </section>
 
-    <section class="card" id="talk-card">
-      <h2><span>01</span> Talk button</h2>
-      <div class="row">
-        <label>Button<select id="button">
+    <section class="page" id="talk-card">
+      <header><h1>Talk</h1><p>How you start and stop talking.</p></header>
+      <div class="group">
+        <label class="item"><span><b>Mouse button</b></span><select id="button">
           <option value="forward">Side button (forward)</option>
           <option value="back">Side button (back)</option>
           <option value="middle">Wheel click</option>
         </select></label>
-        <label>Keyboard shortcut<select id="hotkey">
-          <option value="ctrl_alt_space">⌃ Control + ⌥ Option + Space</option>
-          <option value="alt_shift_space">⌥ Option + ⇧ Shift + Space</option>
-          <option value="ctrl_shift_space">⌃ Control + ⇧ Shift + Space</option>
+        <label class="item"><span><b>Keyboard shortcut</b></span><select id="hotkey">
+          <option value="ctrl_alt_space">⌃ ⌥ Space</option>
+          <option value="alt_shift_space">⌥ ⇧ Space</option>
+          <option value="ctrl_shift_space">⌃ ⇧ Space</option>
           <option value="">Off</option>
         </select></label>
-      </div>
-      <div class="row">
-        <label>How it works<select id="mode">
-          <option value="hold">Hold to talk, release to send</option>
-          <option value="toggle">Click to start, click to send</option>
+        <label class="item"><span><b>How it works</b></span><select id="mode">
+          <option value="hold">Hold to talk</option>
+          <option value="toggle">Click to start and send</option>
         </select></label>
       </div>
-      <label class="check"><input type="checkbox" id="airpods" /> Press AirPods to talk</label>
-      <p class="note" id="airpods-note">Press your AirPods (or any headphones with a play button) to start, then stop talking or press again to send. Double and triple press still skip tracks in Spotify or Music. While this is on, Control Center shows Xpu Command as playing.</p>
-      <label class="check"><input type="checkbox" id="auto_stop" /> Send when I stop talking <small>(after a click or a double knock)</small></label>
-      <label class="check"><input type="checkbox" id="sound_cues" /> Sound cues when listening starts and when it's sent</label>
-      <p class="note">Use the mouse button or the shortcut, whichever is handy: hold, speak, release. On a trackpad, use the shortcut.</p>
-      <label class="check"><input type="checkbox" id="knock" /> Double-knock the laptop to talk <small>(experimental)</small></label>
-      <div class="row" id="knock-row">
-        <label>Knock strength<select id="knock_sensitivity">
+      <div class="group">
+        <label class="item"><span><b>AirPods press</b><small id="airpods-note">Press to talk. Double and triple press still skip tracks.</small></span><input type="checkbox" class="switch" id="airpods" /></label>
+        <label class="item"><span><b>Double knock</b><small>Knock twice on the palm rest. Experimental.</small></span><input type="checkbox" class="switch" id="knock" /></label>
+        <label class="item" id="knock-row"><span><b>Knock strength</b></span><select id="knock_sensitivity">
           <option value="high">Light taps</option>
-          <option value="medium">Normal knocks</option>
-          <option value="low">Firm knocks only</option>
+          <option value="medium">Normal</option>
+          <option value="low">Firm only</option>
         </select></label>
       </div>
-      <p class="note" id="knock-note">Knock twice on the palm rest or the laptop's edge (not on the trackpad) to start; stop talking or knock again to send. Taps right after typing or clicking are ignored. Uses the MacBook's motion sensor; it is read only while this is on.</p>
-      <p class="note" id="knock-state"></p>
-      <p class="note">The button stops doing its usual job (like "Back" in a browser) while Xpu Command runs. Pause it from the menu-bar icon.</p>
+      <p class="hint warn" id="knock-state"></p>
+      <details class="more">
+        <summary>More options</summary>
+        <div class="group">
+          <label class="item"><span><b>Send when I stop talking</b><small>After a click, knock or AirPods press.</small></span><input type="checkbox" class="switch" id="auto_stop" /></label>
+          <label class="item"><span><b>Sound cues</b><small>A soft sound when listening starts and stops.</small></span><input type="checkbox" class="switch" id="sound_cues" /></label>
+        </div>
+        <p class="hint">The talk button stops doing its usual job while Xpu Command runs. Pause it from the menu-bar icon.</p>
+      </details>
     </section>
 
-    <section class="card" id="speech-card">
-      <h2><span>02</span> Speech to text</h2>
+    <section class="page" id="speech-card">
+      <header><h1>Speech</h1><p>Turning your voice into text.</p></header>
       <div class="seg" id="stt">
-        <button data-v="local">On this computer <small>private, offline</small></button>
-        <button data-v="cloud">Cloud <small>OpenAI, fastest</small></button>
+        <button data-v="local"><b>On this Mac</b><small>Private, works offline</small></button>
+        <button data-v="cloud"><b>Cloud</b><small>OpenAI, needs a key</small></button>
       </div>
-      <label>Microphone<select id="input_device"></select></label>
-      <p class="note">Using Bluetooth headphones? Pick your laptop's microphone here: when headphones use their own mic, they switch to lower-quality call audio.</p>
       <div id="local-box">
-        <div class="row">
-          <label>Model<select id="local_model"></select></label>
-          <label>Language<select id="language">
+        <div class="group">
+          <label class="item"><span><b>Language</b></span><select id="language">
             <option value="en">English</option><option value="auto">Detect automatically</option>
-            <option value="fa">Persian</option><option value="de">German</option><option value="fr">French</option><option value="es">Spanish</option>
+            <option value="fa">Persian · فارسی</option><option value="de">German</option><option value="fr">French</option><option value="es">Spanish</option>
           </select></label>
+          <label class="item"><span><b>Model</b><small id="model-state"></small></span><select id="local_model"></select></label>
+          <div class="item" id="download-row"><span><b>Download</b><small>Checked against its published fingerprint.</small></span><button class="primary" id="download">Download</button></div>
         </div>
-        <p class="note" id="fa-note">فارسی: Small (multilingual) understands Persian far better than Base. Say «آره»، «نه» or «همیشه» to answer questions, «بس کن» to stop, «برگردون» to undo. macOS has no Persian voice, so Persian answers are shown in the pill instead of read aloud.</p>
-        <div class="model-line"><span id="model-state"></span><button id="download">Download model</button></div>
         <div class="progress" hidden><i id="progress"></i></div>
-        <p class="note">Models are downloaded over HTTPS and checked against their published SHA-256 before use.</p>
+        <p class="hint" id="fa-note">فارسی: Small (multilingual) works best. Say «آره»، «نه» or «همیشه» to answer, «بس کن» to stop, «برگردون» to undo. Persian answers are shown, not read aloud.</p>
       </div>
       <div id="cloud-box" hidden>
-        <div class="row key">
-          <label>OpenAI API key<input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…" /></label>
-          <button id="save-key">Save key</button><button id="clear-key" class="ghost">Remove</button>
+        <div class="group">
+          <div class="item key"><span><b>OpenAI key</b><small id="key-state"></small></span><input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…" /></div>
         </div>
-        <p class="note" id="key-state"></p>
-        <p class="note">Audio is sent to OpenAI only while cloud mode is on. The key is stored in your system keychain, never in a file.</p>
+        <div class="actions"><button class="ghost" id="clear-key">Remove</button><button class="primary" id="save-key">Save key</button></div>
+        <p class="hint">Audio goes to OpenAI only while Cloud is on. The key stays in your keychain.</p>
+      </div>
+      <div class="group">
+        <label class="item"><span><b>Microphone</b><small>With Bluetooth headphones, the laptop mic sounds better.</small></span><select id="input_device"></select></label>
       </div>
     </section>
 
-    <section class="card" id="words-card">
-      <h2><span>03</span> Where your words go</h2>
-      <div class="seg" id="delivery">
-        <button data-v="type_into_focused">Type where my cursor is <small>any app, any agent</small></button>
-        <button data-v="agent">Send to an agent <small>runs it on a project</small></button>
-        <button data-v="control_mac">Control my Mac <small>open, play, remind, draft</small></button>
+    <section class="page" id="words-card">
+      <header><h1>Mode</h1><p>Where your words go.</p></header>
+      <div class="seg three" id="delivery">
+        <button data-v="type_into_focused"><b>Type</b><small>Where my cursor is</small></button>
+        <button data-v="agent"><b>Agent</b><small>Code on a project</small></button>
+        <button data-v="control_mac"><b>Control Mac</b><small>Open, play, remind</small></button>
       </div>
       <div id="type-box">
-        <label class="check"><input type="checkbox" id="auto_submit" /> Press Enter after typing</label>
-        <p class="note warn">In a terminal, Enter runs the line. Leave this off unless you always review first.</p>
+        <div class="group">
+          <label class="item"><span><b>Press Enter after typing</b><small class="warn">In a terminal, Enter runs the line.</small></span><input type="checkbox" class="switch" id="auto_submit" /></label>
+        </div>
       </div>
       <div id="agent-box" hidden>
-        <div class="row">
-          <label>Agent<select id="agent"><option value="claude">Claude Code</option><option value="codex">Codex</option><option value="custom">Custom (any command-line agent)</option></select></label>
-          <label>What it may do<select id="safety">
-            <option value="ask_commands">Edit files; ask me before commands</option>
-            <option value="edit">Edit files in the project (no commands)</option>
-            <option value="read_only">Read only: answer and plan</option>
+        <div class="group">
+          <label class="item"><span><b>Agent</b><small class="agents" id="agents"></small></span><select id="agent"><option value="claude">Claude Code</option><option value="codex">Codex</option><option value="custom">Custom</option></select></label>
+          <div class="item" id="custom-box" hidden><span><b>Program</b><small class="path" id="custom-path">None chosen</small></span><button id="pick-custom">Choose…</button></div>
+          <label class="item"><span><b>It may</b><small id="ask-note">Asks you out loud before each command. Say yes, no or always.</small></span><select id="safety">
+            <option value="ask_commands">Edit, ask before commands</option>
+            <option value="edit">Edit files only</option>
+            <option value="read_only">Read only</option>
           </select></label>
+          <div class="item"><span><b>Project folder</b><small class="path" id="project">None chosen</small></span><button id="pick">Choose…</button></div>
         </div>
-        <div class="agents" id="agents"></div>
-        <div id="custom-box" hidden>
-          <div class="row folder">
-            <div class="path" id="custom-path">No program chosen</div>
-            <button id="pick-custom">Choose program…</button>
-          </div>
-          <p class="note warn">A custom agent runs with your permissions in the project folder: Xpu Command passes the safety level (XPU_SAFETY) but can't enforce it. It gets the request on stdin and prints plain text, or JSON lines: {"type":"status","text":…}, {"type":"session","id":…}, {"type":"done","summary":…}. Shells and script interpreters can't be chosen; point to the agent itself or a script that starts it.</p>
-        </div>
-        <div class="row folder">
-          <div class="path" id="project">No project folder chosen</div>
-          <button id="pick">Choose folder…</button>
-        </div>
-        <p class="note" id="ask-note">Claude asks before each command: answer <b>"yes"</b>, <b>"no"</b> or <b>"always"</b> out loud, or press to allow. Commands that delete, push or run downloaded code need a spoken "yes". With Codex this level runs read-only.</p>
-        <p class="note">Follow-ups continue the same conversation for 30 minutes. Say <b>"stop"</b> to stop the agent, <b>"new task"</b> to start a fresh conversation.</p>
+        <p class="hint">Say “stop” to stop, “new task” to start fresh.</p>
       </div>
       <div id="mac-box" hidden>
-        <div class="row">
-          <label>Model<select id="mac_model">
-            <option value="sonnet">Sonnet: best for working inside apps</option>
-            <option value="haiku">Haiku: fastest, for simple commands</option>
+        <div class="group">
+          <label class="item"><span><b>Model</b><small>Haiku is fastest; Sonnet is better inside apps.</small></span><select id="mac_model">
+            <option value="haiku">Haiku</option>
+            <option value="sonnet">Sonnet</option>
           </select></label>
         </div>
-        <p class="note">Say things like "open Spotify", "volume 30", "remind me to call the accountant tomorrow at 10", "open gmail.com in Chrome and tell me my latest email". It reads and controls only the apps you allow under App access, and it can't run commands.</p>
-        <p class="note">Reminders, events, notes, drafts and quitting apps are shown first: <b>press or knock within 3 seconds to cancel</b>. Shortcuts need your yes: <b>press or knock to allow</b>. The first time, macOS asks whether Xpu Command may control each app.</p>
+        <p class="hint">Try “open Spotify”, “volume 30” or “remind me to call Sara at 10”. Reminders, notes and drafts wait 3 seconds: press or knock to cancel.</p>
       </div>
       <div id="claude-box">
-        <label id="profile-row">Claude account (profile)<select id="claude_profile"></select></label>
-        <label class="check"><input type="checkbox" id="speak_summary" /> Read the result aloud in my headset</label>
-        <label class="check"><input type="checkbox" id="conversation" /> Then listen for my reply <small>(say "that's all" to finish)</small></label>
+        <div class="group">
+          <label class="item" id="profile-row"><span><b>Claude account</b></span><select id="claude_profile"></select></label>
+          <label class="item"><span><b>Read the answer aloud</b></span><input type="checkbox" class="switch" id="speak_summary" /></label>
+          <label class="item"><span><b>Listen for my reply</b><small>Say “that's all” to finish.</small></span><input type="checkbox" class="switch" id="conversation" /></label>
+        </div>
       </div>
     </section>
 
-    <section class="card" id="access-card">
-      <h2><span>04</span> App access</h2>
-      <p class="note">Which apps the assistant may <b>see</b> (read the window) or <b>control</b> (click, type, menus). Every app is <b>Off</b> until you change it; when it needs an app that is off, it asks you first, for that request only.</p>
-      <label class="check"><input type="checkbox" id="allow_all_apps" /> Allow all apps (control)</label>
-      <p class="note warn" id="allow-all-warn">All apps can be read and controlled. Password managers, Keychain and System Settings stay off; Terminal-like apps still need their own setting below.</p>
-      <label class="check"><input type="checkbox" id="step_by_step" /> Step by step: every action waits for my press or knock</label>
-      <div class="row folder">
-        <input id="app-filter" type="search" placeholder="Find an app…" autocomplete="off" spellcheck="false" />
-        <span class="note" id="app-count"></span>
+    <section class="page" id="access-card">
+      <header><h1>Apps</h1><p>What the assistant may see or control. Everything is Off until you choose.</p></header>
+      <div class="group">
+        <label class="item"><span><b>Allow all apps</b><small class="warn" id="allow-all-warn">Every app can be read and controlled, except passwords, Keychain and System Settings.</small></span><input type="checkbox" class="switch" id="allow_all_apps" /></label>
+        <label class="item"><span><b>Step by step</b><small>Every action waits for your press.</small></span><input type="checkbox" class="switch" id="step_by_step" /></label>
       </div>
+      <div class="search"><input id="app-filter" type="search" placeholder="Find an app" autocomplete="off" spellcheck="false" /><span id="app-count"></span></div>
       <ol class="apps" id="apps"></ol>
-      <div class="row folder">
-        <span class="note" id="screen-state"></span>
-        <button id="grant-screen">Allow screenshots…</button>
+      <div class="group">
+        <div class="item"><span><b>Screenshots</b><small id="screen-state"></small></span><button id="grant-screen">Allow…</button></div>
       </div>
-      <p class="note">Screenshots are a fallback for apps that can't be read: they need macOS Screen Recording. The assistant never types into password fields, and buttons like Send, Delete, Pay or Sign out always wait for your press.</p>
     </section>
 
-    <section class="card" id="activity-card">
-      <h2><span>05</span> Activity</h2>
-      <p class="note">Every action taken on your Mac, newest first. Only short summaries are kept, on this computer.</p>
-      <ol class="activity" id="activity"></ol>
-      <div class="row folder"><span id="undo-what"></span><span class="buttons"><button id="undo">Undo last request</button><button id="activity-clear">Clear</button></span></div>
-      <p class="note">Or say "undo that". Undo works for 30 minutes: it closes apps it opened, reopens apps it quit, deletes the reminders, events and notes it made, and puts volume, dark mode and music back.</p>
+    <section class="page" id="activity-card">
+      <header><h1>Activity</h1><p>What happened on your Mac, newest first.</p></header>
+      <ol class="list" id="activity"></ol>
+      <div class="actions"><span class="hint" id="undo-what"></span><button class="ghost" id="activity-clear">Clear</button><button class="primary" id="undo">Undo last</button></div>
+      <p class="hint">Or say “undo that”, within 30 minutes.</p>
     </section>
 
-    <section class="card" id="memory-card">
-      <h2><span>06</span> Memory</h2>
-      <p class="note">Things the assistant knows about you: people, places, folders, preferences. Say "remember that Sara is my accountant" or add them here. They stay on this Mac (only you can read the file) and are given to the agent with each new request.</p>
-      <label class="check"><input type="checkbox" id="memory" /> Use memory</label>
-      <ol class="activity memory" id="memory-list"></ol>
-      <div class="row folder"><input id="memory-new" maxlength="200" placeholder="e.g. My main project is ~/code/shop" /><span class="buttons"><button id="memory-add">Add</button><button id="memory-clear" class="ghost">Clear all</button></span></div>
+    <section class="page" id="memory-card">
+      <header><h1>Memory</h1><p>What the assistant knows about you. Stays on this Mac.</p></header>
+      <div class="group">
+        <label class="item"><span><b>Use memory</b><small>Say “remember that Sara is my accountant”.</small></span><input type="checkbox" class="switch" id="memory" /></label>
+      </div>
+      <ol class="list memory" id="memory-list"></ol>
+      <div class="add"><input id="memory-new" maxlength="200" placeholder="Add a note, e.g. My main project is ~/code/shop" /><button class="primary" id="memory-add">Add</button></div>
+      <div class="actions"><button class="ghost" id="memory-clear">Clear all</button></div>
     </section>
 
-    <section class="card" id="routines-card">
-      <h2><span>07</span> Routines</h2>
-      <p class="note">Several actions under one name. Say the name ("start my day") and they run at once, without waiting for the AI, through the same App access and cancel checks. After asking for something, say "save that as a routine called …", or save one suggested below.</p>
-      <ol class="activity routines" id="routine-list"></ol>
+    <section class="page" id="routines-card">
+      <header><h1>Routines</h1><p>Say a name, and several actions run at once.</p></header>
+      <ol class="list routines" id="routine-list"></ol>
       <div id="suggestions"></div>
+      <p class="hint">After asking for something, say “save that as a routine called start my day”.</p>
     </section>
   </main>
-
 
   <script type="module" src="/src/main.ts"></script>
 </body>
