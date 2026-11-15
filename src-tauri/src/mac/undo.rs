@@ -19,6 +19,7 @@ pub enum Step {
     DeleteNote { id: String },
     ForgetFact { id: String },
     RememberFact { text: String },
+    DeleteRoutine { id: String },
 }
 
 #[derive(Debug, Clone)]

@@ -64,6 +64,7 @@ pub enum Call {
     ClickAt { app: String, x: f64, y: f64 },
     Remember { text: String },
     Forget { text: String },
+    SaveRoutine { name: String, steps: Vec<crate::routines::Step> },
 }
 
 impl Call {
@@ -95,6 +96,7 @@ impl Call {
             Call::ClickAt { .. } => "click_at",
             Call::Remember { .. } => "remember",
             Call::Forget { .. } => "forget",
+            Call::SaveRoutine { .. } => "save_routine",
         }
     }
 
@@ -125,7 +127,7 @@ impl Call {
             Call::Click { .. } | Call::TypeText { .. } | Call::PressKeys { .. } | Call::ChooseMenu { .. } | Call::Scroll { .. } | Call::ClickAt { .. } => Risk::Safe,
             Call::OpenApp { .. } | Call::OpenUrl { .. } | Call::WebSearch { .. } | Call::Media { .. } | Call::PlayMusic { .. } | Call::SetVolume { .. } | Call::DarkMode { .. } => Risk::Safe,
             Call::Remember { .. } | Call::Forget { .. } => Risk::Safe,
-            Call::QuitApp { .. } | Call::CreateReminder { .. } | Call::CreateEvent { .. } | Call::CreateNote { .. } | Call::DraftEmail { .. } => Risk::Change,
+            Call::QuitApp { .. } | Call::CreateReminder { .. } | Call::CreateEvent { .. } | Call::CreateNote { .. } | Call::DraftEmail { .. } | Call::SaveRoutine { .. } => Risk::Change,
             Call::RunShortcut { .. } => Risk::Confirm,
         }
     }
@@ -174,6 +176,7 @@ impl Call {
             Call::ClickAt { app, x, y } => format!("Clicking at ({x:.0}, {y:.0}) in {app}"),
             Call::Remember { text } => format!("Remembering: {text}"),
             Call::Forget { text } => format!("Forgetting “{text}”"),
+            Call::SaveRoutine { name, steps } => format!("Save the routine “{name}”: {}", steps.iter().map(crate::routines::label).collect::<Vec<_>>().join(", ")),
         };
         crate::agents::clip(&s, 140)
     }
@@ -220,6 +223,7 @@ pub fn schemas() -> Value {
         s("click_at", "Fallback: click at x, y (pixels) in the app's latest screenshot.", json!({ "app": { "type": "string" }, "x": { "type": "number" }, "y": { "type": "number" } }), &["app", "x", "y"]),
         s("remember", "Save a short fact the user asked you to remember about them (a person, place, folder or preference), in their own words, e.g. \"Sara is my accountant, sara@example.com\". Only when the user asks to remember something.", json!({ "text": { "type": "string", "maxLength": 200 } }), &["text"]),
         s("forget", "Remove remembered facts that contain these words. Only when the user asks to forget something.", json!({ "text": { "type": "string" } }), &["text"]),
+        s("save_routine", "Save a routine the user can run later by saying its name. Only when the user asks. Steps can only be these tools, with the same arguments as when you call them: open_app, quit_app, open_url, web_search, media, play_music, set_volume, dark_mode, run_shortcut. The user sees it first and can cancel it.", json!({ "name": { "type": "string", "description": "What the user will say, e.g. \"start my day\"" }, "steps": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "type": "object", "properties": { "tool": { "type": "string" }, "args": { "type": "object" } }, "required": ["tool", "args"] } } }), &["name", "steps"]),
         s("draft_email", "Open a new email draft in Mail for the user to review and send. It is never sent automatically. Use only email addresses the user said; leave \"to\" empty otherwise.", json!({ "to": { "type": "array", "items": { "type": "string" }, "maxItems": 10 }, "subject": { "type": "string" }, "body": { "type": "string" } }), &["subject", "body"]),
     ])
 }
@@ -237,6 +241,12 @@ struct Empty {}
 #[serde(deny_unknown_fields)]
 struct Text {
     text: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RoutineArgs {
+    name: String,
+    steps: Vec<crate::routines::Step>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -504,6 +514,11 @@ pub fn parse(tool: &str, v: &Value, now: NaiveDateTime) -> Result<Call, String> 
         "open_app" => Call::OpenApp { name: name("name", &args::<Name>(v)?.name)? },
         "remember" => Call::Remember { text: text("text", &args::<Text>(v)?.text, crate::memory::MAX_TEXT, false)? },
         "forget" => Call::Forget { text: text("text", &args::<Text>(v)?.text, 100, false)? },
+        "save_routine" => {
+            let a: RoutineArgs = args(v)?;
+            let (name, steps) = crate::routines::validate(&a.name, &a.steps).map_err(|e| e.to_string())?;
+            Call::SaveRoutine { name, steps }
+        }
         "quit_app" => Call::QuitApp { name: name("name", &args::<Name>(v)?.name)? },
         "run_shortcut" => Call::RunShortcut { name: name("name", &args::<Name>(v)?.name)? },
         "open_url" => Call::OpenUrl { url: web_url(&args::<UrlArgs>(v)?.url)? },
@@ -622,7 +637,7 @@ mod tests {
     fn every_schema_parses_and_names_match() {
         let list = schemas();
         let names: Vec<&str> = list.as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names.len(), 26);
+        assert_eq!(names.len(), 27);
         for n in &names {
             let e = p(n, json!({ "zzz": 1 })).unwrap_err();
             assert!(e.contains("invalid arguments") || e.contains("give a level"), "{n}: {e}");
@@ -641,6 +656,10 @@ mod tests {
         assert_eq!(p("run_shortcut", json!({"name":"Morning"})).unwrap().risk(), Risk::Confirm);
         assert_eq!(p("remember", json!({"text":"Sara is my accountant"})).unwrap().risk(), Risk::Safe);
         assert!(p("remember", json!({"text":"x".repeat(201)})).is_err());
+        let r = p("save_routine", json!({"name":"Start my day","steps":[{"tool":"open_app","args":{"name":"Slack"}}]})).unwrap();
+        assert_eq!(r.risk(), Risk::Change);
+        assert_eq!(r.describe(), "Save the routine “start my day”: Opening Slack");
+        assert!(p("save_routine", json!({"name":"x y","steps":[{"tool":"click","args":{"element":1}}]})).is_err());
     }
 
     #[test]

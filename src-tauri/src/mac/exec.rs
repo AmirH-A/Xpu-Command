@@ -21,16 +21,37 @@ pub struct MacExec {
     shots_dir: std::path::PathBuf,
     request: u64,
     memory: bool,
+    learn: bool,
+    done: parking_lot::Mutex<Vec<crate::routines::Step>>,
+}
+
+impl Drop for MacExec {
+    fn drop(&mut self) {
+        if self.learn {
+            crate::routines::record(std::mem::take(&mut *self.done.lock()));
+        }
+    }
 }
 
 impl MacExec {
     pub fn new(policy: Policy, shots_dir: std::path::PathBuf) -> Self {
-        Self { session: ui::Session::default(), policy, shots_dir, request: undo::next_request(), memory: true }
+        Self { session: ui::Session::default(), policy, shots_dir, request: undo::next_request(), memory: true, learn: true, done: Default::default() }
     }
 
     pub fn with_memory(mut self, on: bool) -> Self {
         self.memory = on;
         self
+    }
+
+    pub fn without_learning(mut self) -> Self {
+        self.learn = false;
+        self
+    }
+
+    fn save_routine(&self, name: &str, steps: &[crate::routines::Step]) -> Result<String, String> {
+        let r = crate::routines::save(name, steps).map_err(|e| e.to_string())?;
+        undo::push(self.request, format!("deleted the routine \"{}\"", r.name), Step::DeleteRoutine { id: r.id });
+        Ok(format!("Saved the routine \"{}\". The user can say \"{}\" to run it.", r.name, r.name))
     }
 
     fn remember(&self, text: &str) -> Result<String, String> {
@@ -127,7 +148,14 @@ impl Exec for MacExec {
             Call::ClickAt { app, x, y } => t(self.session.click_at(&self.same_app(app, target)?, *x, *y)?),
             Call::Remember { text } => t(self.remember(text)?),
             Call::Forget { text } => t(self.forget(text)?),
-            other => run_action(other, self.request).map(Output::Text),
+            Call::SaveRoutine { name, steps } => t(self.save_routine(name, steps)?),
+            other => {
+                let out = run_action(other, self.request)?;
+                if let Some(step) = crate::routines::step_of(other) {
+                    self.done.lock().push(step);
+                }
+                Ok(Output::Text(out))
+            }
         }
     }
 }
@@ -307,6 +335,7 @@ fn revert(step: &Step) -> Result<(), String> {
         Step::DeleteNote { id } => osascript(DELETE_NOTE, &[id], "Notes").map(drop),
         Step::ForgetFact { id } => crate::memory::remove(id).map(drop).map_err(|e| e.to_string()),
         Step::RememberFact { text } => crate::memory::add(text).map(drop).map_err(|e| e.to_string()),
+        Step::DeleteRoutine { id } => crate::routines::remove(id).map(drop).map_err(|e| e.to_string()),
     }
 }
 

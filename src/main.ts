@@ -149,6 +149,70 @@ function renderApps() {
 }
 
 type Fact = { id: string; text: string; added: string };
+type Step = { tool: string; args: unknown };
+type RoutineRow = { id: string; name: string; steps: Step[]; added: string; labels: string[] };
+type Suggestion = { steps: Step[]; labels: string[]; times: number };
+
+async function refreshRoutines() {
+  const rows = await invoke<RoutineRow[]>('routines_list');
+  const list = $('routine-list');
+  if (!rows.length) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = 'No routines yet.';
+    list.replaceChildren(li);
+  } else {
+    list.replaceChildren(...rows.map((r) => {
+      const li = document.createElement('li');
+      const name = document.createElement('b');
+      name.textContent = `“${r.name}”`;
+      name.dir = 'auto';
+      const what = document.createElement('span');
+      what.textContent = r.labels.join(' → ');
+      what.title = what.textContent;
+      const btns = document.createElement('span');
+      btns.className = 'buttons';
+      const run = document.createElement('button');
+      run.textContent = 'Run';
+      run.onclick = async () => { try { await invoke('routine_run', { id: r.id }); await refreshActivity(); } catch (e) { flash(String(e), true); } };
+      const del = document.createElement('button');
+      del.className = 'ghost';
+      del.textContent = 'Delete';
+      del.onclick = async () => { try { await invoke('routine_remove', { id: r.id }); await refreshRoutines(); } catch (e) { flash(String(e), true); } };
+      btns.append(run, del);
+      li.append(name, what, btns);
+      return li;
+    }));
+  }
+  const sugg = await invoke<Suggestion[]>('routine_suggestions');
+  $('suggestions').replaceChildren(...sugg.map((g) => {
+    const box = document.createElement('div');
+    box.className = 'suggestion';
+    const p = document.createElement('p');
+    p.className = 'note';
+    p.textContent = `You've asked for this ${g.times} times: ${g.labels.join(' → ')}. Save it as a routine?`;
+    const row = document.createElement('div');
+    row.className = 'row folder';
+    const input = document.createElement('input');
+    input.placeholder = 'Name to say, e.g. start my day';
+    input.maxLength = 40;
+    const btns = document.createElement('span');
+    btns.className = 'buttons';
+    const save = document.createElement('button');
+    save.textContent = 'Save';
+    save.onclick = async () => {
+      try { await invoke('routine_save', { name: input.value, steps: g.steps }); flash('Routine saved'); await refreshRoutines(); } catch (e) { flash(String(e), true); }
+    };
+    const no = document.createElement('button');
+    no.className = 'ghost';
+    no.textContent = 'Not now';
+    no.onclick = async () => { try { await invoke('routine_dismiss', { steps: g.steps }); await refreshRoutines(); } catch (e) { flash(String(e), true); } };
+    btns.append(save, no);
+    row.append(input, btns);
+    box.append(p, row);
+    return box;
+  }));
+}
 
 async function refreshMemory() {
   const facts = await invoke<Fact[]>('memory_list');
@@ -190,6 +254,7 @@ async function refreshUndo() {
 async function refreshActivity() {
   await refreshUndo();
   await refreshMemory();
+  await refreshRoutines();
   const rows = await invoke<ActivityEntry[]>('activity_recent');
   const list = $('activity');
   if (!rows.length) {

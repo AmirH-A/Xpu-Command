@@ -84,6 +84,23 @@ pub fn maybe_run() -> bool {
             true
         }
         #[cfg(target_os = "macos")]
+        Some("--selftest-routine") => {
+            let spoken = args[2..].join(" ");
+            let Some(r) = crate::routines::match_spoken(&spoken, &crate::routines::list()).cloned() else {
+                println!("no routine is called \"{spoken}\"");
+                return true;
+            };
+            let exec = std::sync::Arc::new(crate::mac::exec::MacExec::new(Default::default(), crate::mac::workspace().unwrap()).without_learning());
+            let steps: Vec<(String, serde_json::Value)> = r.steps.iter().map(|st| (st.tool.clone(), st.args.clone())).collect();
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let (done, stopped) = rt.block_on(crate::mac::server::run_steps(std::sync::Arc::new(ConsoleHost), exec, Default::default(), Default::default(), &steps));
+            println!("ROUTINE {} done={done:?} stopped={stopped:?}", r.name);
+            if std::env::var("XPU_UNDO").is_ok_and(|v| v == "1") {
+                println!("UNDO {}", crate::mac::exec::undo_last());
+            }
+            true
+        }
+        #[cfg(target_os = "macos")]
         Some("--selftest-mac") => {
             mac_request(&args[2..].join(" "));
             true

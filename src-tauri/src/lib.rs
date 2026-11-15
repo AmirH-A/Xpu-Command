@@ -12,6 +12,7 @@ mod inject;
 mod knock;
 mod mac;
 mod memory;
+mod routines;
 mod hotkey;
 mod input;
 mod overlay_window;
@@ -79,6 +80,12 @@ pub fn run() {
             commands::memory_add,
             commands::memory_remove,
             commands::memory_clear,
+            commands::routines_list,
+            commands::routine_suggestions,
+            commands::routine_save,
+            commands::routine_dismiss,
+            commands::routine_remove,
+            commands::routine_run,
             commands::undo_last,
         ])
         .setup(move |app| {

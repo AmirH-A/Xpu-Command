@@ -143,6 +143,32 @@ pub async fn start_approvals(host: Arc<dyn Host>, limits: Limits) -> std::io::Re
     serve(host, Toolset::Approvals { always: Default::default() }, limits, "xpu").await
 }
 
+pub async fn run_steps(host: Arc<dyn Host>, exec: Arc<dyn Exec>, policy: Policy, limits: Limits, steps: &[(String, Value)]) -> (Vec<String>, Option<String>) {
+    let st = State {
+        host,
+        tools: Toolset::Mac { exec, policy, run: Default::default() },
+        limits,
+        token: String::new(),
+        host_header: String::new(),
+        calls: tokio::sync::Mutex::new(0),
+        closed: Default::default(),
+    };
+    let mut done = Vec::new();
+    for (name, args) in steps {
+        let (out, is_error) = call_tool(&st, name, args).await;
+        let msg = match out {
+            Output::Text(t) => t,
+            Output::Image { text, .. } => text,
+        };
+        if is_error || msg.starts_with("The user ") {
+            let why = msg.strip_prefix("Refused: ").or_else(|| msg.strip_prefix("Failed: ")).unwrap_or(&msg).to_string();
+            return (done, Some(why));
+        }
+        done.push(msg);
+    }
+    (done, None)
+}
+
 async fn serve(host: Arc<dyn Host>, tools: Toolset, limits: Limits, name: &'static str) -> std::io::Result<Server> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
@@ -568,7 +594,7 @@ mod tests {
         let (c, _) = post(&s, json!({"jsonrpc":"2.0","method":"notifications/initialized"})).await;
         assert_eq!(c, 202);
         let (_, v) = post(&s, json!({"jsonrpc":"2.0","id":2,"method":"tools/list"})).await;
-        assert_eq!(v["result"]["tools"].as_array().unwrap().len(), 26);
+        assert_eq!(v["result"]["tools"].as_array().unwrap().len(), 27);
         let (_, v) = post(&s, json!({"jsonrpc":"2.0","id":3,"method":"resources/list"})).await;
         assert_eq!(v["error"]["code"], -32601);
     }
@@ -618,6 +644,26 @@ mod tests {
         assert!(t.contains("cancelled"));
         assert!(exec.0.lock().is_empty(), "a cancelled action never runs");
         assert!(host.log.lock().iter().any(|l| l == "record create_note Cancelled"));
+    }
+
+    #[tokio::test]
+    async fn routine_steps_run_through_the_same_gate_and_stop_at_a_cancel() {
+        let steps = |v: &[(&str, Value)]| v.iter().map(|(n, a)| (n.to_string(), a.clone())).collect::<Vec<_>>();
+        let host = Arc::new(FakeHost::default());
+        let exec = Arc::new(FakeExec::default());
+        let (done, stop) = run_steps(host.clone(), exec.clone(), Policy::default(), quick(), &steps(&[("open_app", json!({"name":"Slack"})), ("set_volume", json!({"level":30}))])).await;
+        assert_eq!((done.len(), stop), (2, None));
+        assert_eq!(*exec.0.lock(), ["open_app", "set_volume"]);
+
+        let host = Arc::new(FakeHost { press_after: Some(Duration::from_millis(30)), ..Default::default() });
+        let exec = Arc::new(FakeExec::default());
+        let (done, stop) = run_steps(host, exec.clone(), Policy::default(), quick(), &steps(&[("open_app", json!({"name":"Slack"})), ("quit_app", json!({"name":"Mail"})), ("open_app", json!({"name":"Notes"}))])).await;
+        assert_eq!(done.len(), 1);
+        assert!(stop.unwrap().contains("cancelled"));
+        assert_eq!(*exec.0.lock(), ["open_app"], "nothing runs after a cancel");
+
+        let (done, stop) = run_steps(Arc::new(FakeHost::default()), Arc::new(FakeExec::default()), Policy::default(), quick(), &steps(&[("open_url", json!({"url":"file:///etc/passwd"}))])).await;
+        assert!(done.is_empty() && stop.is_some());
     }
 
     #[tokio::test]

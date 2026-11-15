@@ -36,7 +36,8 @@ The current local time is {} ({}, UTC{}). Give dates to tools as local time, YYY
         now.format("%Z"),
         now.format("%:z"),
     );
-    let memory_rule = "\nWhen the user asks you to remember something about them, call remember with it in their words; when they ask you to forget something, call forget.";
+    let memory_rule = "\nWhen the user asks you to remember something about them, call remember with it in their words; when they ask you to forget something, call forget.\n\
+When the user asks to save what you just did, or a list of actions, as a routine, call save_routine with those actions as steps.";
     if memory.is_empty() {
         format!("{base}{memory_rule}")
     } else {

@@ -563,6 +563,11 @@ impl Controller {
                 None => {}
             }
         }
+        if matches!(s.delivery, Delivery::Agent | Delivery::ControlMac) {
+            if let Some(r) = crate::routines::match_spoken(&text, &crate::routines::list()).cloned() {
+                return self.run_routine(app, &s, r).await;
+            }
+        }
         match s.delivery {
             Delivery::TypeIntoFocused => {
                 self.overlay(app, Phase::Typing, &text, None);
@@ -676,6 +681,36 @@ impl Controller {
         })?;
         self.follow(app, run, Follow { name, project, continuing, speak: s.speak_summary, agent: s.agent, profile: s.claude_profile.clone() }, text, approvals);
         Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    pub async fn run_routine(self: &Arc<Self>, app: &AppHandle, s: &Settings, r: crate::routines::Routine) -> Result<()> {
+        if self.agent_cancel.lock().is_some() {
+            return Err(msg("still working on the last request; say \"stop\" to stop it"));
+        }
+        let workspace = crate::mac::workspace()?;
+        let host = Arc::new(MacHost { ctl: self.clone(), app: app.clone(), speak: s.speak_summary });
+        let policy = s.mac_policy();
+        let exec = Arc::new(crate::mac::exec::MacExec::new(policy.clone(), workspace).with_memory(s.memory).without_learning());
+        let steps: Vec<(String, serde_json::Value)> = r.steps.iter().map(|st| (st.tool.clone(), st.args.clone())).collect();
+        self.overlay(app, Phase::Working, &format!("Routine: {}", r.name), Some("Routine"));
+        let (done, stopped) = crate::mac::server::run_steps(host, exec, policy, Default::default(), &steps).await;
+        crate::frame::hide(app);
+        let said = match stopped {
+            None => format!("Ran {}: {} step{}", r.name, done.len(), if done.len() == 1 { "" } else { "s" }),
+            Some(why) => format!("Stopped {} after {} of {} steps: {}", r.name, done.len(), steps.len(), crate::agents::clip(&why, 120)),
+        };
+        self.overlay(app, Phase::Done, &said, Some("Routine"));
+        if s.speak_summary {
+            speech::speak(said);
+        }
+        self.hide_later(app, Duration::from_secs(3));
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    pub async fn run_routine(self: &Arc<Self>, _app: &AppHandle, _s: &Settings, _r: crate::routines::Routine) -> Result<()> {
+        Err(crate::mac::not_supported())
     }
 
     pub async fn undo(&self) -> String {

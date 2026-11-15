@@ -191,6 +191,46 @@ pub fn memory_clear() -> Result<()> {
     crate::memory::clear()
 }
 
+#[derive(serde::Serialize)]
+pub struct RoutineRow {
+    #[serde(flatten)]
+    routine: crate::routines::Routine,
+    labels: Vec<String>,
+}
+
+#[tauri::command]
+pub fn routines_list() -> Vec<RoutineRow> {
+    crate::routines::list().into_iter().map(|r| RoutineRow { labels: r.steps.iter().map(crate::routines::label).collect(), routine: r }).collect()
+}
+
+#[tauri::command]
+pub fn routine_suggestions() -> Vec<crate::routines::Suggestion> {
+    crate::routines::current_suggestions()
+}
+
+#[tauri::command]
+pub fn routine_save(name: String, steps: Vec<crate::routines::Step>) -> Result<crate::routines::Routine> {
+    crate::routines::save(&name, &steps)
+}
+
+#[tauri::command]
+pub fn routine_dismiss(steps: Vec<crate::routines::Step>) -> Result<()> {
+    crate::routines::forget_suggestion(&steps)
+}
+
+#[tauri::command]
+pub fn routine_remove(id: String) -> Result<bool> {
+    crate::routines::remove(&id)
+}
+
+#[tauri::command]
+pub async fn routine_run(app: AppHandle, ctl: Ctl<'_>, id: String) -> Result<()> {
+    let r = crate::routines::list().into_iter().find(|r| r.id == id).ok_or_else(|| crate::error::msg("that routine no longer exists"))?;
+    let s = ctl.settings.read().clone();
+    let c: Arc<Controller> = ctl.inner().clone();
+    c.run_routine(&app, &s, r).await
+}
+
 #[tauri::command]
 pub fn undo_preview() -> Vec<String> {
     crate::mac::undo::peek_last_request()
