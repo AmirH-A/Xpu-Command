@@ -2,6 +2,12 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
+## 0.5.2 (2026-11-15)
+
+### Changed
+- **The speech model step explains itself**: Whisper turns your voice into text on your Mac, so audio never leaves it; it's a one-time download from Hugging Face (whisper.cpp), checked against its published fingerprint.
+- **A progress bar while it downloads**, with the percentage and megabytes, right in Get started.
+
 ## 0.5.1 (2026-11-15)
 
 ### Fixed
