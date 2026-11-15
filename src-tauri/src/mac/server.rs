@@ -568,7 +568,7 @@ mod tests {
         let (c, _) = post(&s, json!({"jsonrpc":"2.0","method":"notifications/initialized"})).await;
         assert_eq!(c, 202);
         let (_, v) = post(&s, json!({"jsonrpc":"2.0","id":2,"method":"tools/list"})).await;
-        assert_eq!(v["result"]["tools"].as_array().unwrap().len(), 24);
+        assert_eq!(v["result"]["tools"].as_array().unwrap().len(), 26);
         let (_, v) = post(&s, json!({"jsonrpc":"2.0","id":3,"method":"resources/list"})).await;
         assert_eq!(v["error"]["code"], -32601);
     }

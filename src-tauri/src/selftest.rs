@@ -261,7 +261,7 @@ fn mac_request(text: &str) {
         let server = crate::mac::server::start(std::sync::Arc::new(ConsoleHost), exec, policy, Default::default()).await.unwrap();
         let config = crate::mac::McpConfigFile::create(&crate::settings::config_dir().unwrap(), &server.mcp_config()).unwrap();
         let workspace = crate::mac::workspace().unwrap();
-        let prompt = crate::mac::system_prompt(chrono::Local::now());
+        let prompt = crate::mac::system_prompt(chrono::Local::now(), &crate::memory::prompt_block(&crate::memory::list()));
         let profile = std::env::var("XPU_CLAUDE_PROFILE").ok().map(|p| settings::claude_profile_dir(&p).expect("bad profile"));
         let model = std::env::var("XPU_MODEL").unwrap_or_else(|_| "haiku".into());
         let started = std::time::Instant::now();

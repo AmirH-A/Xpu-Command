@@ -654,9 +654,18 @@ impl Controller {
         } else {
             None
         };
+        let with_memory;
+        let prompt = match (s.memory, resume.is_some()) {
+            (true, false) => {
+                let block = crate::memory::prompt_block(&crate::memory::list());
+                with_memory = if block.is_empty() { text.to_string() } else { format!("{block}\nRequest:\n{text}") };
+                with_memory.as_str()
+            }
+            _ => text,
+        };
         let run = agents::start(agents::Request {
             kind: s.agent,
-            prompt: text,
+            prompt,
             project: &project,
             safety: s.safety,
             resume: resume.as_deref(),
@@ -703,10 +712,11 @@ impl Controller {
         };
         let host = Arc::new(MacHost { ctl: self.clone(), app: app.clone(), speak: s.speak_summary });
         let policy = s.mac_policy();
-        let exec = Arc::new(crate::mac::exec::MacExec::new(policy.clone(), workspace.clone()));
+        let exec = Arc::new(crate::mac::exec::MacExec::new(policy.clone(), workspace.clone()).with_memory(s.memory));
         let server = crate::mac::server::start(host, exec, policy, Default::default()).await?;
         let config = crate::mac::McpConfigFile::create(&crate::settings::config_dir()?, &server.mcp_config())?;
-        let prompt = crate::mac::system_prompt(chrono::Local::now());
+        let memory = if s.memory { crate::memory::prompt_block(&crate::memory::list()) } else { String::new() };
+        let prompt = crate::mac::system_prompt(chrono::Local::now(), &memory);
         let profile = s.claude_profile.as_deref().map(crate::settings::claude_profile_dir).transpose()?;
         let run = agents::start(agents::Request {
             kind: crate::settings::AgentKind::Claude,

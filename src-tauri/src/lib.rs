@@ -11,6 +11,7 @@ mod frame;
 mod inject;
 mod knock;
 mod mac;
+mod memory;
 mod hotkey;
 mod input;
 mod overlay_window;
@@ -74,6 +75,10 @@ pub fn run() {
             commands::request_screen_recording,
             commands::activity_clear,
             commands::undo_preview,
+            commands::memory_list,
+            commands::memory_add,
+            commands::memory_remove,
+            commands::memory_clear,
             commands::undo_last,
         ])
         .setup(move |app| {

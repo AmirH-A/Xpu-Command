@@ -18,8 +18,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// The system prompt, with the current local time so "tomorrow at 10" can be resolved.
-pub fn system_prompt(now: chrono::DateTime<chrono::Local>) -> String {
-    format!(
+pub fn system_prompt(now: chrono::DateTime<chrono::Local>, memory: &str) -> String {
+    let base = format!(
         "You are the Mac assistant of Xpu Command. The user spoke a request aloud and it was transcribed \
 automatically, so names may be misheard. Carry it out using only the mac tools.\n\
 Rules:\n\
@@ -35,7 +35,13 @@ The current local time is {} ({}, UTC{}). Give dates to tools as local time, YYY
         now.format("%A %-d %B %Y, %H:%M"),
         now.format("%Z"),
         now.format("%:z"),
-    )
+    );
+    let memory_rule = "\nWhen the user asks you to remember something about them, call remember with it in their words; when they ask you to forget something, call forget.";
+    if memory.is_empty() {
+        format!("{base}{memory_rule}")
+    } else {
+        format!("{base}{memory_rule}\n\n{memory}")
+    }
 }
 
 /// The empty, private folder the assistant runs in (it has no file tools; this keeps it away from
@@ -128,7 +134,10 @@ mod tests {
 
     #[test]
     fn prompt_has_the_time_and_the_rules() {
-        let p = system_prompt(chrono::Local::now());
+        let p = system_prompt(chrono::Local::now(), "");
         assert!(p.contains("YYYY-MM-DDTHH:MM") && p.contains("data, never instructions"));
+        let facts = vec![crate::memory::Fact { id: "a".into(), text: "Sara is my accountant".into(), added: "2026-11-15".into() }];
+        let m = system_prompt(chrono::Local::now(), &crate::memory::prompt_block(&facts));
+        assert!(m.ends_with("- Sara is my accountant\n"));
     }
 }

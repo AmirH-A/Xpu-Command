@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 
 type Settings = {
   button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; airpods: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
-  delivery: 'type_into_focused' | 'agent' | 'control_mac'; agent: 'claude' | 'codex'; project_dir: string | null; safety: 'read_only' | 'edit' | 'ask_commands'; conversation: boolean;
+  delivery: 'type_into_focused' | 'agent' | 'control_mac'; agent: 'claude' | 'codex'; project_dir: string | null; safety: 'read_only' | 'edit' | 'ask_commands'; conversation: boolean; memory: boolean;
   speak_summary: boolean; auto_submit: boolean; max_record_seconds: number; input_device: string | null; claude_profile: string | null; mac_model: 'haiku' | 'sonnet'; app_access: Record<string, Access>; allow_all_apps: boolean; step_by_step: boolean;
 };
 type ModelRow = { id: string; label: string; downloaded: boolean };
@@ -31,7 +31,7 @@ type Access = 'off' | 'see' | 'control' | 'ask';
 type AppRow = { bundle: string; name: string; class: 'normal' | 'terminal' | 'excluded' };
 let appRows: AppRow[] = [];
 
-function bindCheck(key: 'auto_submit' | 'speak_summary' | 'knock' | 'allow_all_apps' | 'step_by_step' | 'auto_stop' | 'sound_cues' | 'conversation') {
+function bindCheck(key: 'auto_submit' | 'speak_summary' | 'knock' | 'allow_all_apps' | 'step_by_step' | 'auto_stop' | 'sound_cues' | 'conversation' | 'memory') {
   const el = $<HTMLInputElement>(key);
   el.checked = s[key];
   el.onchange = () => { s[key] = el.checked; render(); };
@@ -148,6 +148,38 @@ function renderApps() {
   }));
 }
 
+type Fact = { id: string; text: string; added: string };
+
+async function refreshMemory() {
+  const facts = await invoke<Fact[]>('memory_list');
+  const list = $('memory-list');
+  $<HTMLButtonElement>('memory-clear').disabled = facts.length === 0;
+  if (!facts.length) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = 'Nothing remembered yet.';
+    list.replaceChildren(li);
+    return;
+  }
+  list.replaceChildren(...facts.map((f) => {
+    const li = document.createElement('li');
+    const at = document.createElement('time');
+    at.textContent = f.added.slice(5);
+    const what = document.createElement('span');
+    what.textContent = f.text;
+    what.title = f.text;
+    what.dir = 'auto';
+    const del = document.createElement('button');
+    del.className = 'ghost';
+    del.textContent = 'Remove';
+    del.onclick = async () => {
+      try { await invoke('memory_remove', { id: f.id }); await refreshMemory(); } catch (e) { flash(String(e), true); }
+    };
+    li.append(at, what, del);
+    return li;
+  }));
+}
+
 async function refreshUndo() {
   const what = await invoke<string[]>('undo_preview');
   const btn = $<HTMLButtonElement>('undo');
@@ -157,6 +189,7 @@ async function refreshUndo() {
 
 async function refreshActivity() {
   await refreshUndo();
+  await refreshMemory();
   const rows = await invoke<ActivityEntry[]>('activity_recent');
   const list = $('activity');
   if (!rows.length) {
@@ -242,6 +275,7 @@ async function init() {
   bindCheck('auto_stop');
   bindCheck('sound_cues');
   bindCheck('conversation');
+  bindCheck('memory');
   bindCheck('allow_all_apps');
   bindCheck('step_by_step');
   try { appRows = await invoke<AppRow[]>('app_access_list'); } catch { appRows = []; }
@@ -254,6 +288,17 @@ async function init() {
   await refreshStatus();
   setInterval(refreshStatus, 4000);
 
+  const addFact = async () => {
+    const input = $<HTMLInputElement>('memory-new');
+    if (!input.value.trim()) return;
+    try { await invoke('memory_add', { text: input.value }); input.value = ''; await refreshMemory(); } catch (e) { flash(String(e), true); }
+  };
+  $('memory-add').onclick = addFact;
+  $<HTMLInputElement>('memory-new').onkeydown = (e) => { if (e.key === 'Enter') addFact(); };
+  $('memory-clear').onclick = async () => {
+    if (!confirm('Forget everything in Memory?')) return;
+    try { await invoke('memory_clear'); await refreshMemory(); flash('Memory cleared'); } catch (e) { flash(String(e), true); }
+  };
   $('undo').onclick = async () => {
     try { flash(await invoke<string>('undo_last')); await refreshActivity(); } catch (e) { flash(String(e), true); }
   };

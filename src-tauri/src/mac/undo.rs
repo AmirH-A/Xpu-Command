@@ -17,6 +17,8 @@ pub enum Step {
     DeleteReminder { id: String },
     DeleteEvent { uid: String, calendar: String },
     DeleteNote { id: String },
+    ForgetFact { id: String },
+    RememberFact { text: String },
 }
 
 #[derive(Debug, Clone)]

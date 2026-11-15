@@ -62,6 +62,8 @@ pub enum Call {
     ChooseMenu { app: String, path: Vec<String> },
     Scroll { app: String, down: bool, amount: u8 },
     ClickAt { app: String, x: f64, y: f64 },
+    Remember { text: String },
+    Forget { text: String },
 }
 
 impl Call {
@@ -91,6 +93,8 @@ impl Call {
             Call::ChooseMenu { .. } => "choose_menu",
             Call::Scroll { .. } => "scroll",
             Call::ClickAt { .. } => "click_at",
+            Call::Remember { .. } => "remember",
+            Call::Forget { .. } => "forget",
         }
     }
 
@@ -120,6 +124,7 @@ impl Call {
             Call::ListApps | Call::ListShortcuts | Call::ListWindows | Call::ReadWindow { .. } | Call::Screenshot { .. } => Risk::Read,
             Call::Click { .. } | Call::TypeText { .. } | Call::PressKeys { .. } | Call::ChooseMenu { .. } | Call::Scroll { .. } | Call::ClickAt { .. } => Risk::Safe,
             Call::OpenApp { .. } | Call::OpenUrl { .. } | Call::WebSearch { .. } | Call::Media { .. } | Call::PlayMusic { .. } | Call::SetVolume { .. } | Call::DarkMode { .. } => Risk::Safe,
+            Call::Remember { .. } | Call::Forget { .. } => Risk::Safe,
             Call::QuitApp { .. } | Call::CreateReminder { .. } | Call::CreateEvent { .. } | Call::CreateNote { .. } | Call::DraftEmail { .. } => Risk::Change,
             Call::RunShortcut { .. } => Risk::Confirm,
         }
@@ -167,6 +172,8 @@ impl Call {
             Call::ChooseMenu { app, path } => format!("Menu {} in {app}", path.join(" › ")),
             Call::Scroll { app, down, .. } => format!("Scrolling {} in {app}", if *down { "down" } else { "up" }),
             Call::ClickAt { app, x, y } => format!("Clicking at ({x:.0}, {y:.0}) in {app}"),
+            Call::Remember { text } => format!("Remembering: {text}"),
+            Call::Forget { text } => format!("Forgetting “{text}”"),
         };
         crate::agents::clip(&s, 140)
     }
@@ -211,6 +218,8 @@ pub fn schemas() -> Value {
         s("scroll", "Scroll an app's front window.", json!({ "app": { "type": "string" }, "direction": { "type": "string", "enum": ["up", "down"] }, "amount": { "type": "integer", "minimum": 1, "maximum": 20 } }), &["app", "direction"]),
         s("screenshot", "Fallback when read_window shows too little: an image of the app's front window. Needs see access and Screen Recording.", json!({ "app": { "type": "string" } }), &["app"]),
         s("click_at", "Fallback: click at x, y (pixels) in the app's latest screenshot.", json!({ "app": { "type": "string" }, "x": { "type": "number" }, "y": { "type": "number" } }), &["app", "x", "y"]),
+        s("remember", "Save a short fact the user asked you to remember about them (a person, place, folder or preference), in their own words, e.g. \"Sara is my accountant, sara@example.com\". Only when the user asks to remember something.", json!({ "text": { "type": "string", "maxLength": 200 } }), &["text"]),
+        s("forget", "Remove remembered facts that contain these words. Only when the user asks to forget something.", json!({ "text": { "type": "string" } }), &["text"]),
         s("draft_email", "Open a new email draft in Mail for the user to review and send. It is never sent automatically. Use only email addresses the user said; leave \"to\" empty otherwise.", json!({ "to": { "type": "array", "items": { "type": "string" }, "maxItems": 10 }, "subject": { "type": "string" }, "body": { "type": "string" } }), &["subject", "body"]),
     ])
 }
@@ -224,6 +233,11 @@ struct Name {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Empty {}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Text {
+    text: String,
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UrlArgs {
@@ -488,6 +502,8 @@ pub fn parse(tool: &str, v: &Value, now: NaiveDateTime) -> Result<Call, String> 
             Call::ListShortcuts
         }
         "open_app" => Call::OpenApp { name: name("name", &args::<Name>(v)?.name)? },
+        "remember" => Call::Remember { text: text("text", &args::<Text>(v)?.text, crate::memory::MAX_TEXT, false)? },
+        "forget" => Call::Forget { text: text("text", &args::<Text>(v)?.text, 100, false)? },
         "quit_app" => Call::QuitApp { name: name("name", &args::<Name>(v)?.name)? },
         "run_shortcut" => Call::RunShortcut { name: name("name", &args::<Name>(v)?.name)? },
         "open_url" => Call::OpenUrl { url: web_url(&args::<UrlArgs>(v)?.url)? },
@@ -606,7 +622,7 @@ mod tests {
     fn every_schema_parses_and_names_match() {
         let list = schemas();
         let names: Vec<&str> = list.as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names.len(), 24);
+        assert_eq!(names.len(), 26);
         for n in &names {
             let e = p(n, json!({ "zzz": 1 })).unwrap_err();
             assert!(e.contains("invalid arguments") || e.contains("give a level"), "{n}: {e}");
@@ -623,6 +639,8 @@ mod tests {
         assert_eq!(p("draft_email", json!({"subject":"a","body":"b"})).unwrap().risk(), Risk::Change);
         assert_eq!(p("quit_app", json!({"name":"Safari"})).unwrap().risk(), Risk::Change);
         assert_eq!(p("run_shortcut", json!({"name":"Morning"})).unwrap().risk(), Risk::Confirm);
+        assert_eq!(p("remember", json!({"text":"Sara is my accountant"})).unwrap().risk(), Risk::Safe);
+        assert!(p("remember", json!({"text":"x".repeat(201)})).is_err());
     }
 
     #[test]

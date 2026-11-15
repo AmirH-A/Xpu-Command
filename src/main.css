@@ -36,6 +36,7 @@ footer { position: fixed; inset: auto 0 0 0; padding: 14px 24px; display: flex; 
 .activity { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 220px; overflow-y: auto; }
 .activity li { display: grid; grid-template-columns: 92px 1fr auto; gap: 10px; align-items: center; font-size: 12.5px; padding: 6px 8px; border-radius: 8px; }
 .activity li:nth-child(odd) { background: var(--bg); }
+.memory li button { padding: 2px 8px; font-size: 11.5px; }
 .activity li.empty { display: block; color: var(--muted); }
 .activity time { font: 11.5px ui-monospace, Menlo, monospace; color: var(--muted); }
 .activity span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -96,6 +96,7 @@ pub struct Settings {
     pub airpods: bool,
     /// After an agent's answer is read aloud, listen briefly for a reply that continues it.
     pub conversation: bool,
+    pub memory: bool,
     pub stt: SttEngine,
     pub local_model: String,
     pub language: String,
@@ -134,6 +135,7 @@ impl Default for Settings {
             sound_cues: true,
             airpods: false,
             conversation: true,
+            memory: true,
             stt: SttEngine::Local,
             local_model: "base.en".into(),
             language: "en".into(),

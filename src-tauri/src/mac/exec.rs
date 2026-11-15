@@ -20,11 +20,37 @@ pub struct MacExec {
     policy: Policy,
     shots_dir: std::path::PathBuf,
     request: u64,
+    memory: bool,
 }
 
 impl MacExec {
     pub fn new(policy: Policy, shots_dir: std::path::PathBuf) -> Self {
-        Self { session: ui::Session::default(), policy, shots_dir, request: undo::next_request() }
+        Self { session: ui::Session::default(), policy, shots_dir, request: undo::next_request(), memory: true }
+    }
+
+    pub fn with_memory(mut self, on: bool) -> Self {
+        self.memory = on;
+        self
+    }
+
+    fn remember(&self, text: &str) -> Result<String, String> {
+        if !self.memory {
+            return Err("memory is off in Settings › Memory".into());
+        }
+        let f = crate::memory::add(text).map_err(|e| e.to_string())?;
+        undo::push(self.request, format!("forgot \"{}\"", f.text), Step::ForgetFact { id: f.id });
+        Ok(format!("Remembered: {}", f.text))
+    }
+
+    fn forget(&self, text: &str) -> Result<String, String> {
+        let gone = crate::memory::forget(text).map_err(|e| e.to_string())?;
+        if gone.is_empty() {
+            return Ok(format!("Nothing remembered matches \"{text}\""));
+        }
+        for f in &gone {
+            undo::push(self.request, format!("remembered \"{}\" again", f.text), Step::RememberFact { text: f.text.clone() });
+        }
+        Ok(format!("Forgot: {}", gone.iter().map(|f| f.text.as_str()).collect::<Vec<_>>().join("; ")))
     }
 
     /// For window calls: the app named in the call, checked to be the same process the gate saw.
@@ -99,6 +125,8 @@ impl Exec for MacExec {
             Call::ChooseMenu { app, path } => t(self.session.choose_menu(&self.same_app(app, target)?, path)?),
             Call::Scroll { app, down, amount } => t(self.session.scroll(&self.same_app(app, target)?, *down, *amount)?),
             Call::ClickAt { app, x, y } => t(self.session.click_at(&self.same_app(app, target)?, *x, *y)?),
+            Call::Remember { text } => t(self.remember(text)?),
+            Call::Forget { text } => t(self.forget(text)?),
             other => run_action(other, self.request).map(Output::Text),
         }
     }
@@ -277,6 +305,8 @@ fn revert(step: &Step) -> Result<(), String> {
         Step::DeleteReminder { id } => osascript(DELETE_REMINDER, &[id], "Reminders").map(drop),
         Step::DeleteEvent { uid, calendar } => osascript(DELETE_EVENT, &[uid, calendar], "Calendar").map(drop),
         Step::DeleteNote { id } => osascript(DELETE_NOTE, &[id], "Notes").map(drop),
+        Step::ForgetFact { id } => crate::memory::remove(id).map(drop).map_err(|e| e.to_string()),
+        Step::RememberFact { text } => crate::memory::add(text).map(drop).map_err(|e| e.to_string()),
     }
 }
 

@@ -158,6 +158,14 @@
       <div class="row folder"><span id="undo-what"></span><span class="buttons"><button id="undo">Undo last request</button><button id="activity-clear">Clear</button></span></div>
       <p class="note">Or say "undo that". Undo works for 30 minutes: it closes apps it opened, reopens apps it quit, deletes the reminders, events and notes it made, and puts volume, dark mode and music back.</p>
     </section>
+
+    <section class="card" id="memory-card">
+      <h2><span>06</span> Memory</h2>
+      <p class="note">Things the assistant knows about you: people, places, folders, preferences. Say "remember that Sara is my accountant" or add them here. They stay on this Mac (only you can read the file) and are given to the agent with each new request.</p>
+      <label class="check"><input type="checkbox" id="memory" /> Use memory</label>
+      <ol class="activity memory" id="memory-list"></ol>
+      <div class="row folder"><input id="memory-new" maxlength="200" placeholder="e.g. My main project is ~/code/shop" /><span class="buttons"><button id="memory-add">Add</button><button id="memory-clear" class="ghost">Clear all</button></span></div>
+    </section>
   </main>
 
   <footer><span class="saved" id="saved"></span><button class="primary" id="save">Save</button></footer>

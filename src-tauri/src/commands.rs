@@ -170,6 +170,28 @@ pub fn activity_recent() -> Vec<crate::activity::Entry> {
 }
 
 #[tauri::command]
+pub fn memory_list() -> Vec<crate::memory::Fact> {
+    let mut all = crate::memory::list();
+    all.reverse();
+    all
+}
+
+#[tauri::command]
+pub fn memory_add(text: String) -> Result<crate::memory::Fact> {
+    crate::memory::add(&text)
+}
+
+#[tauri::command]
+pub fn memory_remove(id: String) -> Result<bool> {
+    crate::memory::remove(&id)
+}
+
+#[tauri::command]
+pub fn memory_clear() -> Result<()> {
+    crate::memory::clear()
+}
+
+#[tauri::command]
 pub fn undo_preview() -> Vec<String> {
     crate::mac::undo::peek_last_request()
 }
