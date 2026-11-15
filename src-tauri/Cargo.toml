@@ -1,6 +1,6 @@
 [package]
 name = "xpu-command"
-version = "0.3.0"
+version = "0.4.0"
 description = "Hold a mouse button, talk to your AI coding agent."
 edition = "2021"
 rust-version = "1.80"
