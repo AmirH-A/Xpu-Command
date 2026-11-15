@@ -83,8 +83,13 @@ pub enum VoiceCommand {
 
 /// Short spoken commands. Only an utterance that is *just* the command counts.
 pub fn voice_command(text: &str) -> Option<VoiceCommand> {
-    let t: String = text.to_lowercase().chars().filter(|c| c.is_alphanumeric() || *c == ' ').collect();
-    match t.trim() {
+    let t: String = crate::sanitize::fold_persian(&text.to_lowercase()).chars().filter(|c| c.is_alphanumeric() || *c == ' ').collect();
+    let t = t.split_whitespace().collect::<Vec<_>>().join(" ");
+    match t.as_str() {
+        "بس کن" | "وایسا" | "توقف" | "متوقف شو" | "استاپ" => Some(VoiceCommand::Stop),
+        "کار جدید" | "از اول" | "شروع دوباره" | "مکالمه جدید" => Some(VoiceCommand::NewTask),
+        "کافیه" | "تمام" | "تموم" | "همین" | "همین بود" | "نه ممنون" | "نه مرسی" | "ولش کن" => Some(VoiceCommand::Done),
+        "برگردون" | "برگردونش" | "آندو" | "اندو" | "قبلی رو برگردون" => Some(VoiceCommand::Undo),
         "stop" | "stop it" | "cancel" | "stop the agent" => Some(VoiceCommand::Stop),
         "new task" | "new session" | "start over" | "new conversation" => Some(VoiceCommand::NewTask),
         "undo" | "undo that" | "undo it" | "undo the last one" | "take that back" | "revert that" => Some(VoiceCommand::Undo),
@@ -579,6 +584,9 @@ impl Controller {
     /// Speech to text with the configured engine; the result is cleaned for display and use.
     async fn transcribe(&self, s: &Settings, audio: Captured, vocabulary: String) -> Result<String> {
         let raw = match s.stt {
+            SttEngine::Local if s.local_model.ends_with(".en") && !matches!(s.language.as_str(), "en" | "auto") => {
+                return Err(msg("This speech model only understands English. In Settings › Speech to text, pick a multilingual model (Small is best for Persian)."));
+            }
             SttEngine::Local => {
                 let engine = self.engine.clone();
                 let (model, lang) = (s.local_model.clone(), s.language.clone());
@@ -885,6 +893,11 @@ mod tests {
         assert_eq!(voice_command("New task."), Some(VoiceCommand::NewTask));
         assert_eq!(voice_command("Start over"), Some(VoiceCommand::NewTask));
         assert_eq!(voice_command("Undo that."), Some(VoiceCommand::Undo));
+        assert_eq!(voice_command("بس کن."), Some(VoiceCommand::Stop));
+        assert_eq!(voice_command(" کار  جدید "), Some(VoiceCommand::NewTask));
+        assert_eq!(voice_command("کافیه"), Some(VoiceCommand::Done));
+        assert_eq!(voice_command("برگردونش!"), Some(VoiceCommand::Undo));
+        assert_eq!(voice_command("اسپاتیفای رو باز کن"), None);
         assert_eq!(voice_command("undo the reminder and open notes"), None);
         assert_eq!(voice_command("stop using the old API and add a test"), None, "a request mentioning stop is a request");
         assert_eq!(voice_command(""), None);

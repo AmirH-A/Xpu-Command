@@ -113,19 +113,25 @@ pub fn dangerous_command(cmd: &str) -> Option<&'static str> {
 
 /// What a spoken answer means. "No" words win over "yes" words ("no, don't do it").
 pub fn parse_answer(text: &str) -> Option<Answer> {
-    let t: String = text.to_lowercase().chars().map(|c| if c.is_alphanumeric() || c == '\'' { c } else { ' ' }).collect();
+    let t: String = crate::sanitize::fold_persian(&text.to_lowercase()).chars().map(|c| if c.is_alphanumeric() || c == '\'' { c } else { ' ' }).collect();
     let words: Vec<&str> = t.split_whitespace().collect();
     let has = |w: &str| words.contains(&w);
-    let phrase = |p: &str| t.split_whitespace().collect::<Vec<_>>().join(" ").contains(p);
-    let no = ["no", "nope", "nah", "don't", "dont", "stop", "deny", "cancel", "never", "negative", "reject", "wait"].iter().any(|w| has(w)) || phrase("do not");
+    let joined = words.join(" ");
+    let phrase = |p: &str| joined.contains(p);
+    let no = ["no", "nope", "nah", "don't", "dont", "stop", "deny", "cancel", "never", "negative", "reject", "wait"].iter().any(|w| has(w))
+        || phrase("do not")
+        || ["نه", "نخیر", "خیر", "نکن", "لغو", "کنسل", "وایسا", "نزن", "هرگز"].iter().any(|w| has(w))
+        || ["صبر کن", "نمی خوام", "نمیخوام", "اجازه نمیدم", "اجازه نمی دم"].iter().any(|p| phrase(p));
     if no {
         return Some(Answer::No);
     }
-    if has("always") {
+    if has("always") || has("همیشه") {
         return Some(Answer::Always);
     }
     let yes = ["yes", "yeah", "yep", "yup", "sure", "ok", "okay", "allow", "approve", "approved", "fine", "affirmative", "correct", "proceed", "continue"].iter().any(|w| has(w))
-        || ["go ahead", "do it", "run it", "go for it", "sounds good"].iter().any(|p| phrase(p));
+        || ["go ahead", "do it", "run it", "go for it", "sounds good"].iter().any(|p| phrase(p))
+        || ["آره", "اره", "بله", "بلی", "آری", "باشه", "اوکی", "حتما", "بزن", "برو", "تایید", "مجازه", "درسته"].iter().any(|w| has(w))
+        || ["انجام بده", "اجرا کن", "اجازه میدم", "اجازه می دم"].iter().any(|p| phrase(p));
     yes.then_some(Answer::Yes)
 }
 
@@ -209,6 +215,18 @@ mod tests {
         for u in ["", "what?", "hmm", "the weather is nice", "know"] {
             assert_eq!(parse_answer(u), None, "{u}");
         }
+    }
+
+    #[test]
+    fn persian_answers() {
+        for y in ["آره", "بله.", "باشه، انجام بده", "اره بزن", "بلي"] {
+            assert_eq!(parse_answer(y), Some(Answer::Yes), "{y}");
+        }
+        for n in ["نه", "نه، نکن", "صبر کن", "نمی‌خوام", "آره... نه"] {
+            assert_eq!(parse_answer(n), Some(Answer::No), "{n}");
+        }
+        assert_eq!(parse_answer("آره، همیشه"), Some(Answer::Always));
+        assert_eq!(parse_answer("هوا خوبه"), None);
     }
 
     #[test]

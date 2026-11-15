@@ -22,7 +22,7 @@ use tokio::sync::{mpsc, oneshot};
 
 pub const VOICE_NOTE: &str = "The user's request was spoken aloud and transcribed automatically, so names of files, functions and \
 variables may be misheard: match them to what exists in the project. When you finish, end with one or two plain sentences \
-(no markdown, no code) saying what you did; they will be read aloud.";
+(no markdown, no code) saying what you did; they will be read aloud. Answer in the language the user spoke.";
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]

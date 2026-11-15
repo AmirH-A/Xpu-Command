@@ -108,6 +108,7 @@ pub fn is_phantom(text: &str, voiced_ms: u32) -> bool {
     const PHANTOMS: &[&str] = &[
         "thank you", "thanks", "thank you very much", "thanks for watching", "thank you for watching", "you", "bye", "bye bye",
         "okay", "oh", "uh", "um", "hmm", "so", "please subscribe", "subscribe", "subtitles by the amaraorg community", "music",
+        "ممنون", "مرسی", "خداحافظ", "زیرنویس", "زیرنویس فارسی", "ممنون که تماشا کردید", "موسیقی",
     ];
     if voiced_ms >= 1200 {
         return false;
@@ -188,5 +189,7 @@ mod tests {
         assert!(is_phantom(" you ", 0));
         assert!(!is_phantom("Thank you.", 2000), "said for real");
         assert!(!is_phantom("open spotify", 300));
+        assert!(is_phantom("ممنون.", 400));
+        assert!(!is_phantom("اسپاتیفای رو باز کن", 400));
     }
 }

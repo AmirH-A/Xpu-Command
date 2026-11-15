@@ -56,6 +56,7 @@ mouse button (held) ─► microphone ─► speech-to-text ─► ┬─ Mode A
   - **Say "undo that"** (or press Undo in Activity) within 30 minutes to reverse the last request: apps it opened are closed, apps it quit reopen, the reminders, events and notes it made are deleted, and volume, dark mode and music go back.
 - **Two triggers:** a mouse button, or a keyboard shortcut (default **⌃⌥Space**) for trackpads. Hold, speak, release.
 - **Listening:** after a click (toggle mode) or a double knock it sends when you stop talking (1.5 s of quiet) and cancels if you say nothing. Silence is trimmed before transcription, the stop knock is cut off, and Whisper's phantom phrases ("Thank you.") are dropped. Soft sound cues mark start, send and cancel.
+- **Persian (فارسی):** pick Persian in Settings › Speech to text (it switches to a multilingual model; Small is best). Answer with «آره»، «نه» or «همیشه», say «بس کن» to stop and «برگردون» to undo. The agent answers in the language you spoke; macOS has no Persian voice, so those answers are shown, not read aloud.
 - **AirPods:** press once to talk (Settings › Talk button › Press AirPods to talk). Double and triple press still skip tracks in Spotify or Music.
 - **Double knock (experimental, MacBooks with Apple silicon):** knock twice on the palm rest to start; stop talking or knock again to send. Taps within 1.2 s of typing, clicking or scrolling are ignored. Off by default. Calibrate with `src-tauri/target/debug/xpu-command --selftest-knock [low|medium|high|<g>]`.
 

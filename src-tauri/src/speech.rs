@@ -45,13 +45,27 @@ fn queue() -> &'static Sender<Job> {
 }
 
 pub fn speak(text: String) {
+    if !has_voice_for(&text) {
+        return;
+    }
     let _ = queue().send((text, None));
 }
 
 /// Speaks and resolves when finished (or on failure).
 pub async fn speak_and_wait(text: String) {
+    if !has_voice_for(&text) {
+        return;
+    }
     let (tx, rx) = tokio::sync::oneshot::channel();
     if queue().send((text, Some(tx))).is_ok() {
         let _ = rx.await;
     }
+}
+
+fn has_voice_for(text: &str) -> bool {
+    if crate::sanitize::is_mostly_arabic_script(text) {
+        log::info!("no Persian voice on this Mac: the answer is shown, not spoken");
+        return false;
+    }
+    true
 }

@@ -102,6 +102,26 @@ pub fn speakable_summary(text: &str, max: usize) -> String {
     }
 }
 
+pub fn fold_persian(s: &str) -> String {
+    s.chars()
+        .filter_map(|c| match c {
+            'ي' | 'ى' => Some('ی'),
+            'ك' => Some('ک'),
+            'ة' => Some('ه'),
+            'أ' | 'إ' => Some('ا'),
+            '\u{200c}' => Some(' '),
+            '\u{064b}'..='\u{065f}' | '\u{0670}' => None,
+            c => Some(c),
+        })
+        .collect()
+}
+
+pub fn is_mostly_arabic_script(s: &str) -> bool {
+    let letters = s.chars().filter(|c| c.is_alphabetic()).count();
+    let arabic = s.chars().filter(|c| matches!(*c as u32, 0x0600..=0x06FF | 0x0750..=0x077F | 0xFB50..=0xFDFF | 0xFE70..=0xFEFF)).count();
+    letters > 0 && arabic * 5 > letters
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,5 +168,16 @@ mod tests {
     fn summary_cuts_at_a_sentence() {
         let s = speakable_summary("First sentence is here. Second one is much longer and goes on and on.", 40);
         assert_eq!(s, "First sentence is here.");
+    }
+
+    #[test]
+    fn folding_and_script() {
+        assert_eq!(fold_persian("بلي"), "بلی");
+        assert_eq!(fold_persian("نمی\u{200c}خوام"), "نمی خوام");
+        assert_eq!(fold_persian("حتماً"), "حتما");
+        assert!(is_mostly_arabic_script("اسپاتیفای رو باز کردم"));
+        assert!(is_mostly_arabic_script("Spotify رو باز کردم"));
+        assert!(!is_mostly_arabic_script("Opened Spotify for you, done"));
+        assert!(!is_mostly_arabic_script("42"));
     }
 }

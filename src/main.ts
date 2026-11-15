@@ -49,6 +49,7 @@ function render() {
   $('profile-row').hidden = s.delivery === 'agent' && s.agent !== 'claude';
   $('knock-row').hidden = !s.knock;
   $('airpods-note').hidden = !s.airpods;
+  $('fa-note').hidden = s.language !== 'fa';
   $('ask-note').hidden = s.safety !== 'ask_commands';
   $('access-card').hidden = s.delivery !== 'control_mac';
   $('allow-all-warn').hidden = !s.allow_all_apps;
@@ -217,13 +218,24 @@ async function init() {
   await refreshModels();
   await refreshDevices();
   await refreshProfiles();
+  const lang = $<HTMLSelectElement>('language');
+  lang.value = s.language;
+  lang.onchange = () => {
+    s.language = lang.value;
+    if (s.language !== 'en' && s.language !== 'auto' && s.local_model.endsWith('.en')) {
+      s.local_model = s.language === 'fa' || s.local_model === 'small.en' ? 'small' : 'base';
+      $<HTMLSelectElement>('local_model').value = s.local_model;
+      flash('That language needs a multilingual speech model: switched it for you. Download it below, then Save.');
+    }
+    render();
+  };
   const ap = $<HTMLInputElement>('airpods');
   ap.checked = s.airpods;
   ap.onchange = () => { s.airpods = ap.checked; render(); };
   const hk = $<HTMLSelectElement>('hotkey');
   hk.value = s.hotkey ?? '';
   hk.onchange = () => { s.hotkey = (hk.value || null) as Settings['hotkey']; };
-  (['button', 'mode', 'knock_sensitivity', 'mac_model', 'local_model', 'language', 'agent', 'safety'] as const).forEach(bindSelect);
+  (['button', 'mode', 'knock_sensitivity', 'mac_model', 'local_model', 'agent', 'safety'] as const).forEach(bindSelect);
   bindCheck('auto_submit');
   bindCheck('speak_summary');
   bindCheck('knock');
