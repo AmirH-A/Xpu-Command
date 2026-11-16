@@ -2,7 +2,7 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
-## Unreleased
+## 0.8.0 (2026-11-16)
 
 ### Added
 - **Web pages.** In Safari, Chrome, Arc, Brave, Edge and Vivaldi, Control my Mac reads the page itself, clicks links and buttons, fills fields and menus, and submits forms. Clicks also reach buttons that only react to a real mouse press. You allow it once in the browser: Develop › Allow JavaScript from Apple Events in Safari, or View › Developer › Allow JavaScript from Apple Events in Chrome-based browsers.
