@@ -23,6 +23,16 @@ pub fn maybe_run() -> bool {
             }
             true
         }
+        Some("--selftest-say") => {
+            crate::speech::set_language(&args[2]);
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            for text in &args[3..] {
+                let started = std::time::Instant::now();
+                rt.block_on(crate::speech::speak_and_wait(text.clone()));
+                println!("SAID {:?} as {:?} in {} ms", text, crate::speech::language_of(text, &args[2]), started.elapsed().as_millis());
+            }
+            true
+        }
         Some("--selftest-health") => {
             for c in crate::health::run(&settings::load()) {
                 println!("{:>5}  {:<28} {}", match c.ok { Some(true) => "ok", Some(false) => "FIX", None => "?" }, c.title, c.detail);

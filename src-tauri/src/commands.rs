@@ -23,6 +23,7 @@ pub fn save_settings(app: AppHandle, ctl: Ctl, new: Settings) -> Result<Settings
         new.project_dir = Some(settings::validate_project_dir(d)?);
     }
     settings::save(&new)?;
+    crate::speech::set_language(&new.language);
     if new.hotkey != ctl.settings.read().hotkey {
         crate::hotkey::apply(&app, new.hotkey)?;
     }

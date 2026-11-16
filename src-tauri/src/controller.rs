@@ -92,6 +92,10 @@ pub fn voice_command(text: &str) -> Option<VoiceCommand> {
         "کار جدید" | "از اول" | "شروع دوباره" | "مکالمه جدید" => Some(VoiceCommand::NewTask),
         "کافیه" | "تمام" | "تموم" | "همین" | "همین بود" | "نه ممنون" | "نه مرسی" | "ولش کن" => Some(VoiceCommand::Done),
         "برگردون" | "برگردونش" | "آندو" | "اندو" | "قبلی رو برگردون" => Some(VoiceCommand::Undo),
+        "para" | "detente" | "alto" | "stopp" | "halt" | "hör auf" | "arrête" | "arrete" | "停" | "停止" | "止めて" | "とめて" | "ストップ" => Some(VoiceCommand::Stop),
+        "nueva tarea" | "neue aufgabe" | "nouvelle tâche" | "nouvelle tache" | "مهمة جديدة" | "新任务" | "新しいタスク" => Some(VoiceCommand::NewTask),
+        "eso es todo" | "nada más" | "nada mas" | "das wars" | "das war es" | "cest tout" | "cest bon" | "هذا كل شيء" | "就这样" | "没了" | "以上です" | "以上" => Some(VoiceCommand::Done),
+        "deshaz eso" | "deshacer" | "rückgängig" | "mach das rückgängig" | "annule ça" | "annule ca" | "annuler" | "تراجع" | "تراجع عن ذلك" | "撤销" | "元に戻して" | "取り消して" => Some(VoiceCommand::Undo),
         "stop" | "stop it" | "cancel" | "stop the agent" => Some(VoiceCommand::Stop),
         "new task" | "new session" | "start over" | "new conversation" => Some(VoiceCommand::NewTask),
         "undo" | "undo that" | "undo it" | "undo the last one" | "take that back" | "revert that" => Some(VoiceCommand::Undo),
@@ -1081,6 +1085,11 @@ mod tests {
         assert_eq!(voice_command("کافیه"), Some(VoiceCommand::Done));
         assert_eq!(voice_command("برگردونش!"), Some(VoiceCommand::Undo));
         assert_eq!(voice_command("اسپاتیفای رو باز کن"), None);
+        assert_eq!(voice_command("¡Para!"), Some(VoiceCommand::Stop));
+        assert_eq!(voice_command("Mach das rückgängig."), Some(VoiceCommand::Undo));
+        assert_eq!(voice_command("C'est tout."), Some(VoiceCommand::Done));
+        assert_eq!(voice_command("撤销"), Some(VoiceCommand::Undo));
+        assert_eq!(voice_command("新しいタスク"), Some(VoiceCommand::NewTask));
         assert_eq!(voice_command("undo the reminder and open notes"), None);
         assert_eq!(voice_command("stop using the old API and add a test"), None, "a request mentioning stop is a request");
         assert_eq!(voice_command(""), None);

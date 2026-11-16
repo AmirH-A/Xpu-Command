@@ -51,6 +51,7 @@ pub fn run() {
     }
 
     let s = settings::load();
+    speech::set_language(&s.language);
     let hook: &'static input::HookConfig = Box::leak(Box::new(input::HookConfig::new(s.button)));
     let knock_cfg: &'static knock::KnockConfig = Box::leak(Box::new(knock::KnockConfig::new(s.knock, s.knock_sensitivity)));
     let ctl = Arc::new(Controller::new(s, hook, knock_cfg));

@@ -118,20 +118,26 @@ pub fn parse_answer(text: &str) -> Option<Answer> {
     let has = |w: &str| words.contains(&w);
     let joined = words.join(" ");
     let phrase = |p: &str| joined.contains(p);
+    let cjk = |w: &str| joined.contains(w);
     let no = ["no", "nope", "nah", "don't", "dont", "stop", "deny", "cancel", "never", "negative", "reject", "wait"].iter().any(|w| has(w))
         || phrase("do not")
         || ["نه", "نخیر", "خیر", "نکن", "لغو", "کنسل", "وایسا", "نزن", "هرگز"].iter().any(|w| has(w))
-        || ["صبر کن", "نمی خوام", "نمیخوام", "اجازه نمیدم", "اجازه نمی دم"].iter().any(|p| phrase(p));
+        || ["صبر کن", "نمی خوام", "نمیخوام", "اجازه نمیدم", "اجازه نمی دم"].iter().any(|p| phrase(p))
+        || ["nunca", "espera", "cancela", "nein", "nicht", "stopp", "warte", "abbrechen", "non", "jamais", "attends", "annule", "لا", "كلا", "توقف", "الغ"].iter().any(|w| has(w))
+        || ["不", "别", "取消", "停", "いいえ", "いや", "だめ", "ダメ", "やめて", "キャンセル", "待って"].iter().any(|w| cjk(w));
     if no {
         return Some(Answer::No);
     }
-    if has("always") || has("همیشه") {
+    if ["always", "همیشه", "siempre", "immer", "toujours", "دائما"].iter().any(|w| has(w)) || ["总是", "一直", "永远", "いつも", "常に", "ずっと"].iter().any(|w| cjk(w)) {
         return Some(Answer::Always);
     }
     let yes = ["yes", "yeah", "yep", "yup", "sure", "ok", "okay", "allow", "approve", "approved", "fine", "affirmative", "correct", "proceed", "continue"].iter().any(|w| has(w))
         || ["go ahead", "do it", "run it", "go for it", "sounds good"].iter().any(|p| phrase(p))
         || ["آره", "اره", "بله", "بلی", "آری", "باشه", "اوکی", "حتما", "بزن", "برو", "تایید", "مجازه", "درسته"].iter().any(|w| has(w))
-        || ["انجام بده", "اجرا کن", "اجازه میدم", "اجازه می دم"].iter().any(|p| phrase(p));
+        || ["انجام بده", "اجرا کن", "اجازه میدم", "اجازه می دم"].iter().any(|p| phrase(p))
+        || ["sí", "si", "vale", "claro", "adelante", "dale", "ja", "klar", "jawohl", "los", "oui", "ouais", "vas-y", "نعم", "اجل", "حسنا", "موافق", "تمام"].iter().any(|w| has(w))
+        || ["de acuerdo", "d'accord", "dacord", "mach es", "mach das"].iter().any(|p| phrase(p))
+        || ["好", "是", "可以", "行", "同意", "はい", "うん", "いいよ", "オッケー", "お願い", "どうぞ"].iter().any(|w| cjk(w));
     yes.then_some(Answer::Yes)
 }
 
@@ -215,6 +221,16 @@ mod tests {
         for u in ["", "what?", "hmm", "the weather is nice", "know"] {
             assert_eq!(parse_answer(u), None, "{u}");
         }
+    }
+
+    #[test]
+    fn answers_in_other_languages() {
+        for (y, want) in [("Sí, adelante", Answer::Yes), ("Ja, mach es", Answer::Yes), ("Oui", Answer::Yes), ("نعم", Answer::Yes), ("好的", Answer::Yes), ("はい", Answer::Yes),
+            ("No, espera", Answer::No), ("Nein", Answer::No), ("Non, annule", Answer::No), ("لا", Answer::No), ("不要", Answer::No), ("いいえ", Answer::No), ("やめて", Answer::No),
+            ("Sí, siempre", Answer::Always), ("Immer", Answer::Always), ("Toujours", Answer::Always), ("دائماً", Answer::Always), ("总是可以", Answer::Always), ("いつもいいよ", Answer::Always)] {
+            assert_eq!(parse_answer(y), Some(want), "{y}");
+        }
+        assert_eq!(parse_answer("不好"), Some(Answer::No), "no wins over yes inside a word");
     }
 
     #[test]

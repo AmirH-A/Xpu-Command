@@ -35,7 +35,7 @@ pub fn parse(text: &str) -> Option<Vec<Step>> {
     if t.is_empty() || t.chars().count() > 80 || has_joiner(&t) {
         return None;
     }
-    english(&t).or_else(|| persian(&t)).map(|s| vec![s])
+    english(&t).or_else(|| persian(&t)).or_else(|| others(&t)).map(|s| vec![s])
 }
 
 fn step(tool: &str, args: Value) -> Step {
@@ -76,7 +76,35 @@ fn normalize(text: &str) -> String {
 
 fn has_joiner(t: &str) -> bool {
     let w: Vec<&str> = t.split(' ').collect();
-    w.iter().any(|x| matches!(*x, "and" | "then" | "also" | "after" | "و" | "بعد" | "سپس")) || t.contains(',')
+    w.iter().any(|x| matches!(*x, "and" | "then" | "also" | "after" | "و" | "بعد" | "سپس" | "y" | "luego" | "und" | "dann" | "et" | "puis" | "ثم"))
+        || t.contains(',')
+        || ["然后", "并且", "再", "そして", "それから"].iter().any(|j| t.contains(j))
+}
+
+fn others(t: &str) -> Option<Step> {
+    let media = |a: &str| Some(step("media", json!({ "action": a })));
+    let mute = |on: bool| Some(step("set_volume", json!({ "mute": on })));
+    if let Some(n) = rest(t, &["abre ", "abrir ", "öffne ", "starte ", "ouvre ", "lance ", "افتح ", "شغل تطبيق "]) {
+        return Some(target(n.trim_start_matches("el ").trim_start_matches("la ").trim_start_matches("le ")));
+    }
+    if let Some(n) = t.strip_prefix("打开").filter(|n| !n.is_empty()) {
+        return Some(target(n.trim()));
+    }
+    if let Some(n) = t.strip_suffix("を開いて").or_else(|| t.strip_suffix("を開く")).or_else(|| t.strip_suffix("を起動して")).filter(|n| !n.is_empty()) {
+        return Some(target(n.trim()));
+    }
+    if let Some(v) = rest(t, &["volumen ", "lautstärke ", "الصوت ", "مستوى الصوت "]).or_else(|| t.strip_prefix("音量").filter(|v| !v.is_empty())) {
+        return percent(v.trim_end_matches("にして").trim_end_matches('に')).map(|l| step("set_volume", json!({ "level": l })));
+    }
+    match t {
+        "siguiente" | "siguiente canción" | "siguiente cancion" | "nächster titel" | "nächstes lied" | "weiter" | "suivant" | "chanson suivante" | "الاغنية التالية" | "التالي" | "下一首" | "次の曲" => media("next"),
+        "anterior" | "canción anterior" | "vorheriger titel" | "précédent" | "chanson précédente" | "الاغنية السابقة" | "上一首" | "前の曲" => media("previous"),
+        "pausa" | "pausar" | "pausieren" | "mets en pause" | "ايقاف مؤقت" | "暂停" | "一時停止" => media("pause"),
+        "reproduce" | "reproducir" | "continúa" | "abspielen" | "wiedergabe" | "lecture" | "reprends" | "تشغيل" | "播放" | "继续播放" | "再生" => media("play"),
+        "silencio" | "silenciar" | "stumm" | "ton aus" | "coupe le son" | "كتم الصوت" | "静音" | "ミュート" => mute(true),
+        "activa el sonido" | "ton an" | "remets le son" | "الغ كتم الصوت" | "取消静音" | "ミュート解除" => mute(false),
+        _ => None,
+    }
 }
 
 fn rest<'a>(t: &'a str, prefixes: &[&str]) -> Option<&'a str> {
@@ -210,6 +238,26 @@ mod tests {
         assert_eq!(one("سافاری رو ببند"), step("quit_app", json!({"name":"Safari"})));
         assert_eq!(one("حالت تاریک رو روشن کن"), step("dark_mode", json!({"on":true})));
         assert_eq!(one("هوای تهران رو سرچ کن"), step("web_search", json!({"query":"هوای تهران"})));
+    }
+
+    #[test]
+    fn other_languages() {
+        assert_eq!(one("Abre Spotify"), step("open_app", json!({"name":"spotify"})));
+        assert_eq!(one("Öffne Safari."), step("open_app", json!({"name":"safari"})));
+        assert_eq!(one("Ouvre gmail.com"), step("open_url", json!({"url":"https://gmail.com"})));
+        assert_eq!(one("افتح Spotify"), step("open_app", json!({"name":"spotify"})));
+        assert_eq!(one("打开Spotify"), step("open_app", json!({"name":"spotify"})));
+        assert_eq!(one("Spotifyを開いて"), step("open_app", json!({"name":"spotify"})));
+        assert_eq!(one("Volumen 40"), step("set_volume", json!({"level":40})));
+        assert_eq!(one("Lautstärke 25 %"), step("set_volume", json!({"level":25})));
+        assert_eq!(one("音量30"), step("set_volume", json!({"level":30})));
+        assert_eq!(one("音量30にして"), step("set_volume", json!({"level":30})));
+        assert_eq!(one("Siguiente canción."), step("media", json!({"action":"next"})));
+        assert_eq!(one("下一首"), step("media", json!({"action":"next"})));
+        assert_eq!(one("次の曲"), step("media", json!({"action":"next"})));
+        assert_eq!(one("Coupe le son"), step("set_volume", json!({"mute":true})));
+        assert!(parse("Abre Spotify y pon mi lista").is_none());
+        assert!(parse("打开Spotify然后播放").is_none());
     }
 
     #[test]
