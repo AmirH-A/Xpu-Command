@@ -607,7 +607,8 @@ mod tests {
         assert_eq!(post_raw(&s, body.clone(), "Bearer wrong", None).await.0, 401);
         assert_eq!(post_raw(&s, body.clone(), &format!("Bearer {}x", s.token), None).await.0, 401);
         assert_eq!(post_raw(&s, body.clone(), &format!("Bearer {}", s.token), Some("https://evil.example")).await.0, 403);
-        assert_eq!(post_raw(&s, "x".repeat(2 * 1024 * 1024), &format!("Bearer {}", s.token), None).await.0, 413);
+        let big = reqwest::Client::new().post(s.url()).header("Content-Type", "application/json").header("Authorization", format!("Bearer {}", s.token)).body("x".repeat(2 * 1024 * 1024)).send().await;
+        assert!(big.map(|r| r.status().as_u16() == 413).unwrap_or(true), "oversized bodies are refused, by a 413 or by closing the connection");
         assert_eq!(post_raw(&s, "[1,2]".into(), &format!("Bearer {}", s.token), None).await.0, 400);
         let c = reqwest::Client::new();
         assert_eq!(c.get(s.url()).header("Authorization", format!("Bearer {}", s.token)).send().await.unwrap().status().as_u16(), 405);

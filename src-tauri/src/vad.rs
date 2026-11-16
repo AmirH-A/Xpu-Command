@@ -8,6 +8,7 @@ pub const STEP_MS: u32 = 50;
 const SPEECH_MIN_MS: u32 = 150;
 /// After speech, this much quiet ends the turn (auto-stop).
 pub const END_SILENCE_MS: u32 = 1500;
+pub const QUICK_END_MS: u32 = 700;
 /// With no speech at all for this long, the recording is cancelled.
 const NO_SPEECH_MS: u32 = 7000;
 
@@ -29,11 +30,12 @@ pub struct Endpoint {
     quiet_ms: u32,
     voiced_ms: u32,
     started: bool,
+    end_ms: u32,
 }
 
 impl Default for Endpoint {
     fn default() -> Self {
-        Self { floor: f32::MAX, elapsed_ms: 0, loud_run_ms: 0, quiet_ms: 0, voiced_ms: 0, started: false }
+        Self { floor: f32::MAX, elapsed_ms: 0, loud_run_ms: 0, quiet_ms: 0, voiced_ms: 0, started: false, end_ms: END_SILENCE_MS }
     }
 }
 
@@ -51,6 +53,10 @@ impl Endpoint {
     /// Milliseconds of speech so far.
     pub fn voiced_ms(&self) -> u32 {
         self.voiced_ms
+    }
+
+    pub fn set_end_silence(&mut self, ms: u32) {
+        self.end_ms = ms.clamp(QUICK_END_MS, END_SILENCE_MS);
     }
 
     pub fn push(&mut self, rms: f32) -> Verdict {
@@ -75,7 +81,7 @@ impl Endpoint {
             self.loud_run_ms = 0;
             self.quiet_ms += STEP_MS;
         }
-        if self.started && self.quiet_ms >= END_SILENCE_MS {
+        if self.started && self.quiet_ms >= self.end_ms {
             Verdict::Done
         } else if !self.started && self.elapsed_ms >= NO_SPEECH_MS {
             Verdict::NoSpeech
@@ -147,6 +153,20 @@ mod tests {
     fn short_pauses_dont_end_it() {
         let (v, _) = run(&[(0.002, 300), (0.08, 1000), (0.002, 800), (0.08, 1000), (0.002, 1000)]);
         assert_eq!(v, Verdict::Continue, "an 800 ms pause between sentences keeps listening");
+    }
+
+    #[test]
+    fn a_complete_command_ends_sooner() {
+        let mut e = Endpoint::default();
+        let speak = |e: &mut Endpoint, rms: f32, ms: u32| (0..ms / STEP_MS).map(|_| e.push(rms)).last().unwrap();
+        speak(&mut e, 0.002, 300);
+        speak(&mut e, 0.08, 800);
+        e.set_end_silence(QUICK_END_MS);
+        assert_eq!(speak(&mut e, 0.002, 650), Verdict::Continue);
+        assert_eq!(speak(&mut e, 0.002, 100), Verdict::Done, "done after 0.7 s instead of 1.5 s");
+        let mut e = Endpoint::default();
+        e.set_end_silence(10);
+        assert_eq!(e.end_ms, QUICK_END_MS, "never shorter than the quick end");
     }
 
     #[test]

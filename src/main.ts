@@ -417,6 +417,12 @@ async function refreshActivity() {
     const out = document.createElement('b');
     out.className = r.outcome;
     out.textContent = OUTCOME[r.outcome] ?? r.outcome;
+    if (r.tool === 'timing') {
+      li.classList.add('timing');
+      out.className = 'took';
+      out.textContent = r.detail;
+      what.title = '';
+    }
     li.append(at, what, out);
     return li;
   }));

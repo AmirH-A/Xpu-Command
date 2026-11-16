@@ -302,6 +302,13 @@ pub struct Controller {
     pending: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
     generation: std::sync::atomic::AtomicU64,
     tray_live: std::sync::atomic::AtomicBool,
+    timing: Mutex<Option<Timing>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Timing {
+    ended: Instant,
+    text_ms: u128,
 }
 
 impl Controller {
@@ -318,6 +325,7 @@ impl Controller {
             pending: Mutex::new(None),
             generation: Default::default(),
             tray_live: std::sync::atomic::AtomicBool::new(false),
+            timing: Mutex::new(None),
         }
     }
 
@@ -441,12 +449,12 @@ impl Controller {
     }
 
     fn live_words(self: &Arc<Self>, app: &AppHandle, id: u64) {
-        let (model, language) = {
+        let (model, language, instant) = {
             let s = self.settings.read();
             if !s.live_words || s.stt != SttEngine::Local || (s.local_model.ends_with(".en") && !matches!(s.language.as_str(), "en" | "auto")) {
                 return;
             }
-            (s.local_model.clone(), s.language.clone())
+            (s.local_model.clone(), s.language.clone(), s.instant && s.delivery == Delivery::ControlMac)
         };
         let (this, app) = (self.clone(), app.clone());
         tauri::async_runtime::spawn(async move {
@@ -472,9 +480,11 @@ impl Controller {
                     Ok(Ok(t)) => sanitize::clean_transcript(&t),
                     _ => break,
                 };
-                let current = this.recording.lock().as_ref().is_some_and(|r| r.id == id);
-                if !current {
-                    break;
+                let complete = voice_command(&text).is_some() || (instant && crate::mac::quick::parse(&text).is_some());
+                {
+                    let rec = this.recording.lock();
+                    let Some(r) = rec.as_ref().filter(|r| r.id == id) else { break };
+                    r.vad.lock().set_end_silence(if complete { crate::vad::QUICK_END_MS } else { crate::vad::END_SILENCE_MS });
                 }
                 if !text.is_empty() && !crate::vad::is_phantom(&text, voiced) && text != shown {
                     this.overlay(&app, Phase::Listening, &text, None);
@@ -482,6 +492,13 @@ impl Controller {
                 }
             }
         });
+    }
+
+    fn record_timing(&self, what: &str) {
+        let Some(t) = self.timing.lock().take() else { return };
+        let total = t.ended.elapsed().as_millis();
+        let after = total.saturating_sub(t.text_ms);
+        crate::activity::record("timing", &format!("{what}: speech to text {} ms · then {} ms", t.text_ms, after), crate::mac::server::Outcome::Done, &format!("{:.1} s", total as f64 / 1000.0));
     }
 
     fn set_tray_live(&self, app: &AppHandle, on: bool) {
@@ -583,7 +600,9 @@ impl Controller {
         }
         let s = self.settings.read().clone();
         let vocabulary = project_vocabulary(s.project_dir.as_deref());
+        let ended = Instant::now();
         let text = self.transcribe(&s, audio, vocabulary).await?;
+        *self.timing.lock() = Some(Timing { ended, text_ms: ended.elapsed().as_millis() });
         if heard.quiet && (text.is_empty() || crate::vad::is_phantom(&text, heard.voiced_ms) || voice_command(&text) == Some(VoiceCommand::Done)) {
             self.overlay(app, Phase::Hidden, "", None);
             return Ok(());
@@ -638,6 +657,7 @@ impl Controller {
                 })
                 .map_err(|e| msg(e.to_string()))?;
                 rx.await.map_err(|_| msg("typing was interrupted"))??;
+                self.record_timing("Typed");
                 self.hide_later(app, Duration::from_millis(700));
             }
             Delivery::Agent => self.run_agent(app, &s, &text).await?,
@@ -766,6 +786,7 @@ impl Controller {
             None => format!("Ran {}: {} step{}", r.name, done.len(), if done.len() == 1 { "" } else { "s" }),
             Some(why) => format!("Stopped {} after {} of {} steps: {}", r.name, done.len(), steps.len(), crate::agents::clip(&why, 120)),
         };
+        self.record_timing("Routine");
         self.overlay(app, Phase::Done, &said, Some("Routine"));
         if s.speak_summary {
             speech::speak(said);
@@ -800,6 +821,7 @@ impl Controller {
         match (stopped, done.first()) {
             (None, Some(said)) => {
                 log::info!("instant command in {} ms", started.elapsed().as_millis());
+                self.record_timing("Instant command");
                 self.overlay(app, Phase::Done, said, Some("Mac"));
                 if s.speak_summary {
                     speech::speak(said.clone());
@@ -907,6 +929,7 @@ impl Controller {
                     }
                     agents::AgentEvent::Status { text } => this.overlay(&app, Phase::Working, &text, Some(&name)),
                     agents::AgentEvent::Done { summary } => {
+                        this.record_timing(&name);
                         if let Some(x) = this.session.lock().as_mut() {
                             x.at = Instant::now();
                         }
