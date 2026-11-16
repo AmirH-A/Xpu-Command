@@ -952,7 +952,7 @@ impl Controller {
                         if continuing && error != "stopped" {
                             this.session.lock().take();
                         }
-                        this.overlay(&app, Phase::Error, &error, Some(&name));
+                        this.overlay(&app, Phase::Error, &crate::health::recovery(&error), Some(&name));
                         this.hide_later(&app, Duration::from_secs(6));
                         break;
                     }
@@ -978,8 +978,8 @@ impl Controller {
                 let _ = w.show();
             }
         }
-        self.overlay(app, Phase::Error, &e.to_string(), None);
-        self.hide_later(app, Duration::from_secs(4));
+        self.overlay(app, Phase::Error, &crate::health::recovery(&e.to_string()), None);
+        self.hide_later(app, Duration::from_secs(5));
     }
 
     pub fn overlay(&self, app: &AppHandle, phase: Phase, text: &str, agent: Option<&str>) {

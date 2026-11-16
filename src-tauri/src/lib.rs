@@ -8,6 +8,7 @@ mod controller;
 mod cues;
 mod error;
 mod frame;
+mod health;
 mod inject;
 mod knock;
 mod mac;
@@ -40,6 +41,7 @@ pub fn run() {
         }
     }
     logger.init();
+    health::crash::install();
     log::info!("Xpu Command {} starting from {:?}", env!("CARGO_PKG_VERSION"), std::env::current_exe().ok());
     whisper_rs::install_logging_hooks();
 
@@ -90,6 +92,11 @@ pub fn run() {
             commands::pick_custom_agent,
             commands::request_microphone,
             commands::open_link,
+            commands::health_check,
+            commands::crash_pending,
+            commands::crash_report,
+            commands::crash_dismiss,
+            commands::diagnostics_zip,
             commands::move_to_applications,
             commands::routines_list,
             commands::routine_suggestions,

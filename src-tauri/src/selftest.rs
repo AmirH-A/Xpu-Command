@@ -23,6 +23,12 @@ pub fn maybe_run() -> bool {
             }
             true
         }
+        Some("--selftest-health") => {
+            for c in crate::health::run(&settings::load()) {
+                println!("{:>5}  {:<28} {}", match c.ok { Some(true) => "ok", Some(false) => "FIX", None => "?" }, c.title, c.detail);
+            }
+            true
+        }
         Some("--selftest-permissions") => {
             println!("{}", serde_json::to_string(&crate::permissions::status()).unwrap());
             true

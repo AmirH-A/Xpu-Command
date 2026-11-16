@@ -428,6 +428,49 @@ async function refreshActivity() {
   }));
 }
 
+type Check = { id: string; ok: boolean | null; title: string; detail: string; fix: string | null };
+const FIX_LABEL: Record<string, string> = { move: 'Move', accessibility: 'Open settings', microphone: 'Allow', model: 'Show me', 'claude-install': 'How to install', 'claude-login': 'How to sign in' };
+
+async function fixIt(fix: string) {
+  if (fix === 'move') await invoke('move_to_applications');
+  else if (fix === 'accessibility') await invoke('open_permission_settings', { which: 'accessibility' });
+  else if (fix === 'microphone') await invoke('request_microphone');
+  else if (fix === 'model') showPage('speech-card');
+  else if (fix === 'claude-install' || fix === 'claude-login') await invoke('open_link', { which: 'claude-install' });
+  await refreshHealth();
+}
+
+async function refreshHealth() {
+  const checks = await invoke<Check[]>('health_check');
+  const bad = checks.filter((c) => c.ok === false).length;
+  $('health-count').textContent = bad ? String(bad) : '';
+  $('checks').replaceChildren(...checks.map((c) => {
+    const li = document.createElement('li');
+    li.className = c.ok === true ? 'ok' : c.ok === false ? 'bad' : 'unknown';
+    const mark = document.createElement('i');
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = c.ok === true ? '✓' : c.ok === false ? '!' : '?';
+    const text = document.createElement('div');
+    const b = document.createElement('b');
+    b.textContent = c.title;
+    const small = document.createElement('small');
+    small.textContent = c.detail;
+    text.append(b, small);
+    li.setAttribute('aria-label', `${c.title}: ${c.ok === true ? 'OK' : c.ok === false ? 'needs attention' : 'unknown'}. ${c.detail}`);
+    li.append(mark, text);
+    if (c.fix) {
+      const btn = document.createElement('button');
+      btn.textContent = FIX_LABEL[c.fix] ?? 'Fix';
+      btn.onclick = () => { fixIt(c.fix!).catch((e) => flash(String(e), true)); };
+      li.append(btn);
+    }
+    return li;
+  }));
+  const crash = await invoke<{ at: string; summary: string } | null>('crash_pending');
+  $('crash').hidden = !crash;
+  if (crash) $('crash-what').textContent = crash.summary || 'No details.';
+}
+
 async function refreshStatus() {
   const p = await invoke<Perms>('permission_status');
   perms = p;
@@ -439,6 +482,7 @@ async function refreshStatus() {
   $('knock-state').textContent = knockErr ? `Double knock is not available: ${knockErr}` : '';
   $('knock-state').className = `hint${knockErr ? ' warn' : ''}`;
   await refreshActivity();
+  await quietly(refreshHealth);
   const agents = await invoke<AgentInfo[]>('agent_status');
   $('agents').replaceChildren(...agents.map((a) => {
     const el = document.createElement('span');
@@ -518,6 +562,12 @@ async function init() {
     if (!confirm('Forget everything in Memory?')) return;
     try { await invoke('memory_clear'); await refreshMemory(); flash('Memory cleared'); } catch (e) { flash(String(e), true); }
   };
+  $('health-refresh').onclick = () => { refreshHealth().then(() => flash('Checked')).catch((e) => flash(String(e), true)); };
+  $('diagnostics').onclick = async () => {
+    try { const p = await invoke<string>('diagnostics_zip'); flash(`Saved ${p.split('/').pop()}`); } catch (e) { flash(String(e), true); }
+  };
+  $('crash-report').onclick = async () => { try { await invoke('crash_report'); await refreshHealth(); } catch (e) { flash(String(e), true); } };
+  $('crash-dismiss').onclick = async () => { await invoke('crash_dismiss'); await refreshHealth(); };
   $('undo').onclick = async () => {
     try { flash(await invoke<string>('undo_last')); await refreshActivity(); } catch (e) { flash(String(e), true); }
   };

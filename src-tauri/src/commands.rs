@@ -100,7 +100,47 @@ const LINKS: &[(&str, &str)] = &[
     ("license", "https://github.com/XPU-LAB/xpu-command/blob/main/LICENSE"),
     ("issues", "https://github.com/XPU-LAB/xpu-command/issues/new"),
     ("website", "https://xpu-lab.github.io/xpu-command/"),
+    ("claude-install", "https://docs.anthropic.com/en/docs/claude-code/setup"),
 ];
+
+#[tauri::command]
+pub fn health_check(ctl: Ctl) -> Vec<crate::health::Check> {
+    let s = ctl.settings.read().clone();
+    crate::health::run(&s)
+}
+
+#[tauri::command]
+pub fn crash_pending() -> Option<crate::health::crash::Crash> {
+    crate::health::crash::pending()
+}
+
+#[tauri::command]
+pub fn crash_report() -> Result<()> {
+    let url = crate::health::crash::report_url().ok_or_else(|| msg("no crash report"))?;
+    let _guard = crate::agents::SPAWN_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("/usr/bin/open").arg(&url).spawn().map_err(|e| msg(e.to_string()))?;
+    drop(_guard);
+    crate::health::crash::dismiss();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn crash_dismiss() {
+    crate::health::crash::dismiss();
+}
+
+#[tauri::command]
+pub async fn diagnostics_zip(ctl: Ctl<'_>) -> Result<String> {
+    let s = ctl.settings.read().clone();
+    let zip = tauri::async_runtime::spawn_blocking(move || crate::health::diagnostics_zip(&s)).await.map_err(|_| msg("couldn't make the file"))??;
+    #[cfg(target_os = "macos")]
+    {
+        let _guard = crate::agents::SPAWN_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = std::process::Command::new("/usr/bin/open").arg("-R").arg(&zip).spawn();
+    }
+    Ok(zip.display().to_string())
+}
 
 #[tauri::command]
 pub fn open_link(which: String) -> Result<()> {
