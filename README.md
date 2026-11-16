@@ -154,3 +154,7 @@ export APPLE_TEAM_ID="TEAMID"
 Next: selected-text and screen context, a first-run setup guide, auto-update, notarized installers.
 
 Security: see [SECURITY.md](SECURITY.md).
+
+## License
+
+Apache License 2.0: see [LICENSE](LICENSE) and [NOTICE](NOTICE). Privacy: [PRIVACY.md](PRIVACY.md). Terms: [TERMS.md](TERMS.md).

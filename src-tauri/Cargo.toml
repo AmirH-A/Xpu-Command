@@ -4,7 +4,7 @@ version = "0.6.1"
 description = "Hold a mouse button, talk to your AI coding agent."
 edition = "2021"
 rust-version = "1.80"
-license = "UNLICENSED"
+license = "Apache-2.0"
 
 [lib]
 name = "xpu_command_lib"

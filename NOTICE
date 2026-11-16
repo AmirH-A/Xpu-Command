@@ -1,0 +1,16 @@
+Xpu Command
+Copyright 2026 Amirhossein Azarpour and XPU Lab
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It includes or downloads the following third-party work, under their own licenses:
+
+- whisper.cpp (https://github.com/ggerganov/whisper.cpp), MIT License,
+  used through the whisper-rs crate (MIT / Unlicense).
+- Whisper speech models by OpenAI (https://github.com/openai/whisper), MIT License,
+  downloaded on first use from https://huggingface.co/ggerganov/whisper.cpp.
+- Tauri (https://tauri.app), Apache License 2.0 or MIT License.
+- Sora, Manrope and JetBrains Mono fonts, SIL Open Font License 1.1.
+  License texts are in src/fonts/.
+- Other Rust crates and npm packages listed in src-tauri/Cargo.lock and
+  package-lock.json, each under its own license.

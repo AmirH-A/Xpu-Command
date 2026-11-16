@@ -453,6 +453,9 @@ function flash(msg: string, err = false) {
 }
 
 async function init() {
+  document.querySelectorAll<HTMLElement>('[data-link]').forEach((el) => {
+    el.onclick = (e) => { e.preventDefault(); invoke('open_link', { which: el.dataset.link }).catch((err) => flash(String(err), true)); };
+  });
   document.querySelectorAll<HTMLElement>('#pages a').forEach((a) => { a.onclick = () => showPage(a.dataset.page!); });
   s = await invoke<Settings>('get_settings');
   savedJson = JSON.stringify(s);

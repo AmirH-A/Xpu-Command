@@ -94,6 +94,25 @@ pub fn move_and_relaunch(_app: &AppHandle) -> Result<()> {
     Err(msg("only on macOS"))
 }
 
+const LINKS: &[(&str, &str)] = &[
+    ("privacy", "https://github.com/XPU-LAB/xpu-command/blob/main/PRIVACY.md"),
+    ("terms", "https://github.com/XPU-LAB/xpu-command/blob/main/TERMS.md"),
+    ("license", "https://github.com/XPU-LAB/xpu-command/blob/main/LICENSE"),
+    ("issues", "https://github.com/XPU-LAB/xpu-command/issues/new"),
+    ("website", "https://xpu-lab.github.io/xpu-command/"),
+];
+
+#[tauri::command]
+pub fn open_link(which: String) -> Result<()> {
+    let url = LINKS.iter().find(|(k, _)| *k == which).map(|(_, u)| *u).ok_or_else(|| msg("unknown link"))?;
+    let _guard = crate::agents::SPAWN_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("/usr/bin/open").arg(url).spawn().map_err(|e| msg(e.to_string()))?;
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("explorer").arg(url).spawn().map_err(|e| msg(e.to_string()))?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn request_microphone() -> bool {
     permissions::request_microphone().await

@@ -6,7 +6,7 @@ commands.allow = [
   "permission_status", "open_permission_settings", "model_status", "download_model",
   "pick_project", "agent_status", "input_devices", "claude_profiles", "knock_status",
   "activity_recent", "activity_clear", "app_access_list", "request_screen_recording",
-  "request_microphone", "move_to_applications", "pick_custom_agent",
+  "request_microphone", "move_to_applications", "pick_custom_agent", "open_link",
   "undo_preview", "undo_last",
   "memory_list", "memory_add", "memory_remove", "memory_clear",
   "routines_list", "routine_suggestions", "routine_save", "routine_dismiss", "routine_remove", "routine_run"

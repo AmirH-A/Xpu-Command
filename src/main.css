@@ -33,6 +33,9 @@ body { margin: 0; display: grid; grid-template-columns: 196px 1fr; background: v
 .status { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; color: var(--muted); }
 .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .status.ok { color: var(--ok); } .status.bad { color: var(--live); }
+.legal { display: flex; gap: 10px; margin-top: 6px; }
+.legal a { font-size: 11px; color: var(--muted); text-decoration: none; }
+.legal a:hover { color: var(--ink); text-decoration: underline; }
 .saved { font-size: 11.5px; color: var(--muted); min-height: 16px; } .saved.err { color: var(--bad); }
 
 main { overflow-y: auto; padding: 26px 32px 40px; }
