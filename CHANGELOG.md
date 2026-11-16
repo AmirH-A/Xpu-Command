@@ -2,6 +2,21 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
+## 0.7.0 (2026-11-16)
+
+### Added
+- **8 languages.** Settings in English, فارسی, Español, Deutsch, Français, العربية, 中文 and 日本語, following your Mac's language or set in Talk › App language. Persian and Arabic mirror the whole window.
+- **Voice in 8 languages.** Answer with yes, no or always, say stop, new task, that's all or undo, and use instant commands (open an app, volume, music, mute) in each language. Speech recognition adds Arabic, Chinese and Japanese, and spoken answers use a voice that matches their language.
+- **Try it.** After setup, a short tutorial: say "Open Calculator", "Undo that", then "Remind me to stretch in 10 minutes". Each step ticks itself off.
+- **Health.** One page that checks everything Xpu Command needs, with a fix for each problem. Crash reports are saved on your Mac and filed only if you choose. **Send diagnostics** saves the logs to your Desktop.
+- **Accessibility.** Full keyboard control, VoiceOver labels and announcements, a Text size setting, and support for Reduce Motion and Increase Contrast.
+- **Timing in Activity** for each request.
+
+### Changed
+- **Sends sooner** after a complete command: 0.7 s of quiet instead of 1.5 s.
+- **Clearer errors** that say how to fix the problem.
+- **License:** Xpu Command is now open source under the Apache License 2.0, with a privacy policy and terms.
+
 ## 0.6.1 (2026-11-16)
 
 ### Added
