@@ -104,6 +104,7 @@ pub struct Settings {
     pub live_words: bool,
     pub instant: bool,
     pub text_size: TextSize,
+    pub tutorial_done: bool,
     /// Press AirPods (or any headset play button) to talk.
     #[serde(alias = "airpods_press", deserialize_with = "airpods_on")]
     pub airpods: bool,
@@ -150,6 +151,7 @@ impl Default for Settings {
             live_words: true,
             instant: true,
             text_size: TextSize::Normal,
+            tutorial_done: false,
             airpods: false,
             conversation: true,
             memory: true,

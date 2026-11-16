@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 type Settings = {
-  button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; live_words: boolean; instant: boolean; text_size: 'normal' | 'large' | 'larger'; airpods: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
+  button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; live_words: boolean; instant: boolean; text_size: 'normal' | 'large' | 'larger'; tutorial_done: boolean; airpods: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
   delivery: 'type_into_focused' | 'agent' | 'control_mac'; agent: 'claude' | 'codex' | 'custom'; custom_agent: string | null; project_dir: string | null; safety: 'read_only' | 'edit' | 'ask_commands'; conversation: boolean; memory: boolean;
   speak_summary: boolean; auto_submit: boolean; max_record_seconds: number; input_device: string | null; claude_profile: string | null; mac_model: 'haiku' | 'sonnet'; app_access: Record<string, Access>; allow_all_apps: boolean; step_by_step: boolean;
 };
@@ -139,6 +139,36 @@ function syncProgress() {
   $('progress').style.width = `${pct}%`;
 }
 
+let recentRows: ActivityEntry[] = [];
+
+const LESSONS: { say: string; why: string; done: (r: ActivityEntry) => boolean }[] = [
+  { say: 'Open Calculator', why: 'An instant command: it runs at once, without the AI.', done: (r) => r.tool === 'open_app' && r.outcome === 'done' && /calculator/i.test(r.summary) },
+  { say: 'Undo that', why: 'Anything it does can be undone for 30 minutes.', done: (r) => r.tool === 'undo' && r.outcome === 'done' },
+  { say: 'Remind me to stretch in 10 minutes', why: 'A bigger request goes to the AI. You get 3 seconds to cancel it with a press or a knock.', done: (r) => r.tool === 'create_reminder' && r.outcome === 'done' },
+];
+
+function renderLessons() {
+  $('tutorial-mode').hidden = s.delivery === 'control_mac';
+  let allDone = true;
+  $('lessons').replaceChildren(...LESSONS.map((l, i) => {
+    const done = recentRows.some(l.done);
+    allDone &&= done;
+    const li = document.createElement('li');
+    li.className = done ? 'done' : '';
+    const n = document.createElement('i');
+    n.textContent = done ? '✓' : String(i + 1);
+    const text = document.createElement('div');
+    const b = document.createElement('b');
+    b.textContent = `Say “${l.say}”`;
+    const small = document.createElement('small');
+    small.textContent = done ? 'Done' : l.why;
+    text.append(b, small);
+    li.append(n, text);
+    return li;
+  }));
+  $('celebrate').hidden = !allDone;
+}
+
 type Perms = { accessibility: boolean; accessibility_required: boolean; screen_recording: boolean; microphone: 'allowed' | 'not_asked' | 'denied'; needs_move: boolean };
 let perms: Perms | null = null;
 let hasKey = false;
@@ -177,10 +207,17 @@ function renderSetup() {
   ];
   const steps: typeof all = p.needs_move ? move : all;
   const left = p.needs_move ? all.filter((x) => !x.done).length + 1 : steps.filter((x) => !x.done).length;
-  $('setup-card').hidden = left === 0;
+  const tutorial = left === 0 && !s.tutorial_done;
+  $('setup-card').hidden = left === 0 && s.tutorial_done;
+  $('steps').hidden = tutorial;
+  $('try-it').hidden = tutorial;
+  $('tutorial').hidden = !tutorial;
+  $('setup-title').textContent = tutorial ? 'Try it' : 'Get started';
+  $('setup-sub').textContent = tutorial ? 'Three things to say. Each one ticks itself off when it works.' : 'A few steps, once.';
   $('setup-count').textContent = left ? String(left) : '';
   $('setup-count').setAttribute('aria-label', left ? `${left} steps left` : '');
-  if (!page) showPage(left ? 'setup-card' : 'talk-card');
+  if (tutorial) renderLessons();
+  if (!page) showPage(left || tutorial ? 'setup-card' : 'talk-card');
   number();
   $('steps').replaceChildren(...steps.map((st, i) => {
     const li = document.createElement('li');
@@ -413,6 +450,8 @@ async function refreshActivity() {
   await quietly(refreshMemory);
   await quietly(refreshRoutines);
   const rows = await invoke<ActivityEntry[]>('activity_recent');
+  recentRows = rows;
+  if (!s.tutorial_done && !$('tutorial').hidden) renderLessons();
   const list = $('activity');
   if (!rows.length) {
     const li = document.createElement('li');
@@ -577,6 +616,11 @@ async function init() {
     if (!confirm('Forget everything in Memory?')) return;
     try { await invoke('memory_clear'); await refreshMemory(); flash('Memory cleared'); } catch (e) { flash(String(e), true); }
   };
+  const endTutorial = () => { s.tutorial_done = true; render(); showPage('talk-card'); };
+  $('tutorial-finish').onclick = endTutorial;
+  $('tutorial-skip').onclick = endTutorial;
+  $('tutorial-switch').onclick = () => { s.delivery = 'control_mac'; render(); };
+  setInterval(() => { if (page === 'setup-card' && !$('tutorial').hidden) void quietly(refreshActivity); }, 1200);
   $('health-refresh').onclick = () => { refreshHealth().then(() => flash('Checked')).catch((e) => flash(String(e), true)); };
   $('diagnostics').onclick = async () => {
     try { const p = await invoke<string>('diagnostics_zip'); flash(`Saved ${p.split('/').pop()}`); } catch (e) { flash(String(e), true); }

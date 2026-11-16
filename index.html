@@ -30,9 +30,19 @@
 
   <main>
     <section class="page" id="setup-card" hidden>
-      <header><h1>Get started</h1><p>A few steps, once.</p></header>
+      <header><h1 id="setup-title">Get started</h1><p id="setup-sub">A few steps, once.</p></header>
       <ol class="steps" id="steps"></ol>
       <p class="hint" id="try-it"></p>
+      <div id="tutorial" hidden>
+        <div class="mode-note" id="tutorial-mode" hidden><span>These try-outs use <b>Control Mac</b> mode.</span><button class="primary" id="tutorial-switch">Switch to Control Mac</button></div>
+        <ol class="steps lessons" id="lessons" aria-live="polite"></ol>
+        <div class="celebrate" id="celebrate" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+          <div><b>You're all set.</b><small>Hold the button and say what you want, any time. Say “undo that” if something isn't right.</small></div>
+          <button class="primary" id="tutorial-finish">Finish</button>
+        </div>
+        <div class="actions"><button class="ghost" id="tutorial-skip">Skip the tutorial</button></div>
+      </div>
     </section>
 
     <section class="page" id="talk-card">
