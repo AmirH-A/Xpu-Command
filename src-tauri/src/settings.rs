@@ -12,6 +12,15 @@ pub enum TalkButton {
     Middle,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TextSize {
+    #[default]
+    Normal,
+    Large,
+    Larger,
+}
+
 /// Keyboard shortcut, a second trigger besides the mouse button (trackpads, laptops).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -94,6 +103,7 @@ pub struct Settings {
     pub sound_cues: bool,
     pub live_words: bool,
     pub instant: bool,
+    pub text_size: TextSize,
     /// Press AirPods (or any headset play button) to talk.
     #[serde(alias = "airpods_press", deserialize_with = "airpods_on")]
     pub airpods: bool,
@@ -139,6 +149,7 @@ impl Default for Settings {
             sound_cues: true,
             live_words: true,
             instant: true,
+            text_size: TextSize::Normal,
             airpods: false,
             conversation: true,
             memory: true,

@@ -34,3 +34,5 @@ html, body { margin: 0; background: transparent; overflow: hidden; font: 500 14p
 .pill[data-phase="pending"] .orb, .pill[data-phase="confirm"] .orb { background: var(--amber); animation: ring 1s infinite; }
 .pill[data-phase="pending"] .orb svg, .pill[data-phase="confirm"] .orb svg { stroke: #1d1200; fill: #1d1200; }
 .pill[data-phase="confirm"] { box-shadow: 0 0 0 2px var(--amber), 0 12px 40px rgba(0,0,0,.35); }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 type Settings = {
-  button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; live_words: boolean; instant: boolean; airpods: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
+  button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; live_words: boolean; instant: boolean; text_size: 'normal' | 'large' | 'larger'; airpods: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
   delivery: 'type_into_focused' | 'agent' | 'control_mac'; agent: 'claude' | 'codex' | 'custom'; custom_agent: string | null; project_dir: string | null; safety: 'read_only' | 'edit' | 'ask_commands'; conversation: boolean; memory: boolean;
   speak_summary: boolean; auto_submit: boolean; max_record_seconds: number; input_device: string | null; claude_profile: string | null; mac_model: 'haiku' | 'sonnet'; app_access: Record<string, Access>; allow_all_apps: boolean; step_by_step: boolean;
 };
@@ -16,8 +16,20 @@ let models: ModelRow[] = [];
 function seg(id: string, value: string, onPick: (v: string) => void) {
   const box = $(id);
   box.querySelectorAll('button').forEach((b) => {
-    b.classList.toggle('on', b.dataset.v === value);
+    const on = b.dataset.v === value;
+    b.classList.toggle('on', on);
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(on));
+    b.tabIndex = on ? 0 : -1;
     b.onclick = () => { onPick(b.dataset.v!); render(); };
+    b.onkeydown = (e) => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      const all = [...box.querySelectorAll<HTMLButtonElement>('button')];
+      const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
+      const next = all[(all.indexOf(b as HTMLButtonElement) + step + all.length) % all.length];
+      onPick(next.dataset.v!); render(); next.focus();
+    };
   });
 }
 
@@ -50,6 +62,7 @@ function render() {
   $('claude-box').hidden = s.delivery === 'type_into_focused';
   $('profile-row').hidden = s.delivery === 'agent' && s.agent !== 'claude';
   $('knock-row').hidden = !s.knock;
+  document.documentElement.dataset.size = s.text_size;
   scheduleSave();
   $('airpods-note').hidden = !s.airpods;
   $('fa-note').hidden = s.language !== 'fa';
@@ -88,12 +101,12 @@ let page = '';
 function showPage(id: string) {
   page = id;
   document.querySelectorAll<HTMLElement>('main > .page').forEach((p) => p.classList.toggle('shown', p.id === id));
-  document.querySelectorAll<HTMLElement>('#pages a').forEach((a) => a.classList.toggle('on', a.dataset.page === id));
+  document.querySelectorAll<HTMLElement>('#pages button').forEach((a) => { const on = a.dataset.page === id; a.classList.toggle('on', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   document.querySelector('main')?.scrollTo(0, 0);
 }
 
 function number() {
-  document.querySelectorAll<HTMLElement>('#pages a').forEach((a) => {
+  document.querySelectorAll<HTMLElement>('#pages button').forEach((a) => {
     a.hidden = $(a.dataset.page!).hidden;
   });
   if (page && $(page).hidden) showPage('talk-card');
@@ -166,6 +179,7 @@ function renderSetup() {
   const left = p.needs_move ? all.filter((x) => !x.done).length + 1 : steps.filter((x) => !x.done).length;
   $('setup-card').hidden = left === 0;
   $('setup-count').textContent = left ? String(left) : '';
+  $('setup-count').setAttribute('aria-label', left ? `${left} steps left` : '');
   if (!page) showPage(left ? 'setup-card' : 'talk-card');
   number();
   $('steps').replaceChildren(...steps.map((st, i) => {
@@ -444,6 +458,7 @@ async function refreshHealth() {
   const checks = await invoke<Check[]>('health_check');
   const bad = checks.filter((c) => c.ok === false).length;
   $('health-count').textContent = bad ? String(bad) : '';
+  $('health-count').setAttribute('aria-label', bad ? `${bad} need attention` : '');
   $('checks').replaceChildren(...checks.map((c) => {
     const li = document.createElement('li');
     li.className = c.ok === true ? 'ok' : c.ok === false ? 'bad' : 'unknown';
@@ -506,7 +521,7 @@ async function init() {
   document.querySelectorAll<HTMLElement>('[data-link]').forEach((el) => {
     el.onclick = (e) => { e.preventDefault(); invoke('open_link', { which: el.dataset.link }).catch((err) => flash(String(err), true)); };
   });
-  document.querySelectorAll<HTMLElement>('#pages a').forEach((a) => { a.onclick = () => showPage(a.dataset.page!); });
+  document.querySelectorAll<HTMLElement>('#pages button').forEach((a) => { a.onclick = () => showPage(a.dataset.page!); });
   s = await invoke<Settings>('get_settings');
   savedJson = JSON.stringify(s);
   await refreshModels();
@@ -529,7 +544,7 @@ async function init() {
   const hk = $<HTMLSelectElement>('hotkey');
   hk.value = s.hotkey ?? '';
   hk.onchange = () => { s.hotkey = (hk.value || null) as Settings['hotkey']; render(); };
-  (['button', 'mode', 'knock_sensitivity', 'mac_model', 'local_model', 'agent', 'safety'] as const).forEach(bindSelect);
+  (['button', 'mode', 'knock_sensitivity', 'mac_model', 'local_model', 'agent', 'safety', 'text_size'] as const).forEach(bindSelect);
   bindCheck('auto_submit');
   bindCheck('speak_summary');
   bindCheck('knock');
