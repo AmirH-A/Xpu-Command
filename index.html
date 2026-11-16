@@ -98,7 +98,8 @@ p { margin: 0; }
 .btn.small { padding: 9px 14px; font-size: .9rem; }
 
 /* hero */
-.hero { padding-block: clamp(48px, 8vw, 96px) clamp(40px, 6vw, 72px); }
+.hero { position: relative; padding-block: clamp(48px, 8vw, 96px) clamp(40px, 6vw, 72px); isolation: isolate; }
+.hero::before { content: ""; position: absolute; inset: -80px -20px -220px; z-index: -2; -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent); mask-image: linear-gradient(to bottom, #000 55%, transparent); pointer-events: none; background: radial-gradient(700px 420px at 12% 10%, var(--glow), transparent 70%), radial-gradient(620px 420px at 88% 80%, var(--glow-live), transparent 70%); opacity: .55; }
 .hero .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: clamp(32px, 5vw, 64px); align-items: center; }
 .hero h1 { font-size: var(--step-4); }
 .hero h1 em { font-style: normal; color: var(--live-fg); }
@@ -113,14 +114,14 @@ p { margin: 0; }
 .window .bar { height: 26px; display: flex; gap: 7px; align-items: center; padding-inline: 12px; }
 .window .bar i { width: 11px; height: 11px; border-radius: 50%; display: block; }
 .window .bar i:nth-child(1) { background: #ff5f57; } .window .bar i:nth-child(2) { background: #febc2e; } .window .bar i:nth-child(3) { background: #28c840; }
-.window img { display: block; width: 100%; height: auto; aspect-ratio: 760 / 640; }
+.window img { display: block; width: 100%; height: auto; aspect-ratio: 760 / 640; object-fit: cover; object-position: right center; }
 .halo { position: absolute; inset: 4% -8% 8% 6%; background: radial-gradient(closest-side at 35% 35%, var(--glow), transparent), radial-gradient(closest-side at 80% 85%, var(--glow-live), transparent); filter: blur(34px); z-index: -1; }
 
 /* the pill, as the app draws it */
 .pill { position: absolute; right: -4%; bottom: 0; width: min(420px, 92%); display: flex; gap: 14px; align-items: center; padding: 14px 18px; border-radius: 26px; background: rgba(18, 16, 25, .92); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(162, 139, 255, .28); box-shadow: 0 18px 50px rgba(10, 6, 40, .5); color: #f4f2fb; font-family: var(--font-body); transition: box-shadow .3s ease, border-color .3s ease; }
 .pill[data-phase="listening"] { border-color: rgba(255, 181, 71, .5); }
 .pill[data-phase="confirm"] { border-color: transparent; box-shadow: 0 0 0 2px #ffb547, 0 18px 50px rgba(0, 0, 0, .4); }
-.orb { flex: none; width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; background: #7c5cff; transition: background .3s ease; }
+.orb { flex: none; width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; background: #7c5cff; }
 .orb svg { width: 24px; height: 24px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .pill[data-phase="listening"] .orb { animation: ring 1.4s infinite; background: linear-gradient(135deg, #ffb547, #ff9a2e); }
 .pill[data-phase="listening"] .orb svg, .pill[data-phase="confirm"] .orb svg { stroke: #1d1200; }
@@ -142,13 +143,16 @@ p { margin: 0; }
 @keyframes wave { 0%, 100% { height: 4px; } 50% { height: 15px; } }
 
 /* sections */
-section { padding-block: clamp(56px, 9vw, 104px); }
+section { padding-block: clamp(56px, 9vw, 104px); scroll-margin-top: 64px; }
 .head { display: grid; gap: 14px; max-width: 44em; margin-bottom: clamp(32px, 5vw, 52px); }
 .rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 
 .ways { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); }
 .way { padding: 26px 22px 28px 0; display: grid; gap: 10px; align-content: start; }
 .way + .way { padding-left: 22px; border-left: 1px solid var(--line); }
+.wi { width: 30px; height: 30px; fill: none; stroke: var(--fg); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 6px; opacity: .9; }
+.wi .hot { stroke: var(--live); fill: none; }
+.wi circle.hot { fill: var(--live); }
 .way .key { font: 500 .8rem/1 var(--font-mono); color: var(--live-fg); }
 .way p { color: var(--muted); font-size: .96rem; }
 
@@ -156,7 +160,7 @@ section { padding-block: clamp(56px, 9vw, 104px); }
 .mode { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 24px; align-items: center; padding: 26px 28px; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); }
 .mode h3 { margin-bottom: 8px; }
 .mode .what { color: var(--muted); font-size: .97rem; }
-.transcript { font: 400 .9rem/1.65 var(--font-mono); display: grid; gap: 6px; min-width: 0; }
+.transcript { font: 400 .86rem/1.65 var(--font-mono); display: grid; gap: 6px; min-width: 0; }
 .transcript div { display: grid; grid-template-columns: 5.6em minmax(0, 1fr); gap: 10px; }
 .transcript b { font-weight: 500; color: var(--faint); }
 .transcript .you { color: var(--fg); }
@@ -167,7 +171,7 @@ section { padding-block: clamp(56px, 9vw, 104px); }
 .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(32px, 5vw, 64px); align-items: center; }
 .split.flip > :first-child { order: 2; }
 .shot { border-radius: 12px; overflow: hidden; box-shadow: 0 30px 70px rgba(5, 4, 20, .4), 0 0 0 1px var(--line); background: #1d1d27; }
-.shot img { display: block; width: 100%; height: auto; aspect-ratio: 760 / 640; }
+.shot img { display: block; width: 100%; height: auto; aspect-ratio: 760 / 640; object-fit: cover; object-position: right center; }
 .points { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 18px; }
 .points li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 14px; }
 .points svg { width: 22px; height: 22px; fill: none; stroke: var(--accent-fg); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; margin-top: 2px; }
@@ -222,6 +226,17 @@ footer a:hover { color: var(--fg); }
   .pill { right: 0; }
 }
 @media (max-width: 560px) {
+  .window img, .shot img { aspect-ratio: 564 / 640; object-position: 100% 0; }
+  .stage { padding-bottom: 0; display: grid; gap: 14px; }
+  .pill { position: relative; right: auto; bottom: auto; width: 100%; }
+  .hero h1 { font-size: clamp(2.5rem, 12vw, 3.2rem); }
+  .lede { font-size: 1.08rem; }
+  .ctas .btn { flex: 1 1 auto; justify-content: center; }
+  .transcript { font-size: .8rem; }
+  .transcript div + div { margin-top: 4px; }
+  .fa { padding: 24px 22px; }
+  .final h2 { font-size: clamp(2.2rem, 10vw, 2.8rem); }
+  .note { padding: 18px; }
   .ways { grid-template-columns: minmax(0, 1fr); }
   .way, .way + .way { padding-left: 0; border-left: 0; }
   .way + .way { border-top: 1px solid var(--line); }
@@ -297,10 +312,10 @@ html { scroll-behavior: smooth; }
         <p class="lede">There is no wake word and no always-on microphone. You start each request yourself, in whichever way your hands are free.</p>
       </div>
       <div class="ways">
-        <div class="way"><span class="key">Side button</span><h3>Hold and speak</h3><p>Hold your mouse's forward button, say what you want, let go. It sends when you release.</p></div>
-        <div class="way"><span class="key">⌃ ⌥ Space</span><h3>From the keyboard</h3><p>For trackpads. Hold the shortcut, or click once to start and once to send.</p></div>
-        <div class="way"><span class="key">Knock knock</span><h3>Tap the laptop twice</h3><p>Two knocks on the palm rest, read from the MacBook's motion sensor. Taps while you type are ignored.</p></div>
-        <div class="way"><span class="key">AirPods</span><h3>Press once</h3><p>One press on your AirPods starts listening. Double and triple press still skip tracks.</p></div>
+        <div class="way"><svg class="wi" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3" width="12" height="18" rx="6"/><path d="M12 3v6"/><path d="M6 10h4" class="hot"/></svg><span class="key">Side button</span><h3>Hold and speak</h3><p>Hold your mouse's forward button, say what you want, let go. It sends when you release.</p></div>
+        <div class="way"><svg class="wi" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/></svg><span class="key">⌃ ⌥ Space</span><h3>From the keyboard</h3><p>For trackpads. Hold the shortcut, or click once to start and once to send.</p></div>
+        <div class="way"><svg class="wi" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19h18"/><circle cx="12" cy="14.5" r="1.4" class="hot"/><path d="M8.6 14.5a3.4 3.4 0 0 1 6.8 0" class="hot"/><path d="M5.8 14.5a6.2 6.2 0 0 1 12.4 0"/></svg><span class="key">Knock knock</span><h3>Tap the laptop twice</h3><p>Two knocks on the palm rest, read from the MacBook's motion sensor. Taps while you type are ignored.</p></div>
+        <div class="way"><svg class="wi" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4a3 3 0 0 0-3 3v2a3 3 0 0 0 3 3v7"/><path d="M16 4a3 3 0 0 1 3 3v2a3 3 0 0 1-3 3v7"/><circle cx="8" cy="7.5" r=".9" class="hot"/></svg><span class="key">AirPods</span><h3>Press once</h3><p>One press on your AirPods starts listening. Double and triple press still skip tracks.</p></div>
       </div>
     </div>
   </section>
