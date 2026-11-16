@@ -260,6 +260,7 @@ pub fn app_access_list() -> Vec<AppRow> {
             .collect();
         rows.sort_by_key(|r| r.name.to_lowercase());
         rows.dedup_by(|a, b| a.bundle == b.bundle);
+        rows.insert(0, AppRow { bundle: crate::mac::policy::FILES.into(), name: "Your files".into(), class: "normal" });
         rows
     }
     #[cfg(not(target_os = "macos"))]

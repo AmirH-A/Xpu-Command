@@ -22,6 +22,9 @@ pub enum Step {
     DeleteRoutine { id: String },
     /// What was on the clipboard before (None: no text, so clear it).
     Clipboard { text: Option<String> },
+    /// A moved, renamed or trashed item: back from `from` to `to`.
+    MoveBack { from: PathBuf, to: PathBuf },
+    RemoveFolder { path: PathBuf },
 }
 
 #[derive(Debug, Clone)]

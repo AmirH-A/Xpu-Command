@@ -76,6 +76,9 @@ const TERMINALS: &[&str] = &[
     "com.apple.Automator",
 ];
 
+/// The home folder, gated like an app: "see" finds and reads files, "control" also opens and changes them.
+pub const FILES: &str = "xpu.files";
+
 pub fn class(bundle: &str) -> Class {
     if EXCLUDED.iter().any(|b| b.eq_ignore_ascii_case(bundle)) {
         Class::Excluded

@@ -282,6 +282,7 @@ async function refreshProfiles() {
 type ActivityEntry = { at: string; tool: string; summary: string; outcome: 'done' | 'failed' | 'cancelled' | 'declined' | 'refused'; detail: string };
 const OUTCOME: Record<ActivityEntry['outcome'], string> = { done: 'Done', failed: 'Failed', cancelled: 'Cancelled', declined: 'Declined', refused: 'Refused' };
 
+const FILES = 'xpu.files';
 const ACCESS_LABEL: Record<Access, string> = { off: 'Off', see: 'See', control: 'Control', ask: 'Ask each time' };
 
 function levelOf(r: AppRow): Access {
@@ -297,14 +298,14 @@ function renderApps() {
   const q = $<HTMLInputElement>('app-filter').value.trim().toLowerCase();
   const rows = appRows
     .filter((r) => !q || r.name.toLowerCase().includes(q) || r.bundle.toLowerCase().includes(q))
-    .sort((a, b) => Number(levelOf(b) !== 'off') - Number(levelOf(a) !== 'off') || a.name.localeCompare(b.name));
+    .sort((a, b) => Number(b.bundle === FILES) - Number(a.bundle === FILES) || Number(levelOf(b) !== 'off') - Number(levelOf(a) !== 'off') || a.name.localeCompare(b.name));
   const allowed = appRows.filter((r) => levelOf(r) !== 'off').length;
   $('app-count').textContent = t('{a} of {b} apps allowed', { a: allowed, b: appRows.length });
   list.replaceChildren(...rows.slice(0, 300).map((r) => {
     const li = document.createElement('li');
     const name = document.createElement('span');
-    name.textContent = r.name;
-    name.title = r.bundle;
+    name.textContent = r.bundle === FILES ? t('Your files') : r.name;
+    name.title = r.bundle === FILES ? t('Find, read, open, move, rename and trash files in your home folder (never hidden folders or Library).') : r.bundle;
     li.append(name);
     if (r.class === 'excluded') {
       const b = document.createElement('b');

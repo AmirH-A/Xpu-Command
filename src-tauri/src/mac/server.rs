@@ -529,6 +529,9 @@ mod tests {
     struct FakeExec(Mutex<Vec<String>>);
     impl Exec for FakeExec {
         fn target(&self, c: &Call) -> Result<Option<Target>, String> {
+            if c.on_files() {
+                return Ok(Some(Target { bundle: policy::FILES.into(), name: "your files".into(), pid: 0, need: c.need().unwrap(), label: None, unknown_spot: false, frame: None }));
+            }
             let app = match c {
                 Call::ReadWindow { app } | Call::Screenshot { app } | Call::PressKeys { app, .. } | Call::Scroll { app, .. } | Call::ChooseMenu { app, .. } | Call::Wait { app, .. } => app.clone(),
                 Call::Click { .. } | Call::TypeText { .. } => "Chrome".into(),
@@ -609,7 +612,7 @@ mod tests {
         let (c, _) = post(&s, json!({"jsonrpc":"2.0","method":"notifications/initialized"})).await;
         assert_eq!(c, 202);
         let (_, v) = post(&s, json!({"jsonrpc":"2.0","id":2,"method":"tools/list"})).await;
-        assert_eq!(v["result"]["tools"].as_array().unwrap().len(), 34);
+        assert_eq!(v["result"]["tools"].as_array().unwrap().len(), 41);
         let (_, v) = post(&s, json!({"jsonrpc":"2.0","id":3,"method":"resources/list"})).await;
         assert_eq!(v["error"]["code"], -32601);
     }
@@ -763,6 +766,25 @@ mod tests {
         assert!(!call(&s, "wait", json!({"app":"Chrome","text":"Done"})).await.1);
         assert_eq!(*exec.0.lock(), ["press_keys"]);
         assert_eq!(*exec2.0.lock(), ["web_search", "read_clipboard", "wait"]);
+    }
+
+    #[tokio::test]
+    async fn files_are_gated_like_an_app() {
+        let (s, host, exec) = serve(None).await;
+        let (t, _) = call(&s, "find_files", json!({"query":"invoice"})).await;
+        assert!(t.contains("did not allow access to your files"), "{t}");
+        assert!(host.log.lock().iter().any(|l| l.starts_with("ask Approve Let the assistant see your files")));
+        assert!(exec.0.lock().is_empty());
+
+        let (s, _, exec) = serve_with(None, allow(&[(policy::FILES, Access::See)])).await;
+        assert!(!call(&s, "find_files", json!({"query":"invoice"})).await.1);
+        assert!(call(&s, "move_files", json!({"paths":["~/a"],"to":"~/b"})).await.0.contains("did not allow"), "see can't change files");
+
+        let (s, _, exec2) = serve_with(None, allow(&[(policy::FILES, Access::Control)])).await;
+        assert!(!call(&s, "move_files", json!({"paths":["~/a"],"to":"~/b"})).await.1, "runs after the grace period");
+        assert!(call(&s, "trash_files", json!({"paths":["~/a"]})).await.0.contains("did not approve"), "the Trash needs a yes");
+        assert_eq!(*exec.0.lock(), ["find_files"]);
+        assert_eq!(*exec2.0.lock(), ["move_files"]);
     }
 
     #[tokio::test]

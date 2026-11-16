@@ -6,6 +6,8 @@ pub mod apps;
 pub mod ax;
 #[cfg(target_os = "macos")]
 pub mod exec;
+#[cfg(target_os = "macos")]
+pub mod files;
 pub mod policy;
 pub mod quick;
 pub mod server;
@@ -44,6 +46,7 @@ Rules:\n\
 - Use as few tool calls as possible. Do not guess app or shortcut names you have not seen: when unsure, call list_apps or list_shortcuts first.\n\
 - To work inside an app: open_app (or open_url for a web page), then read_window, then click or type_text using the numbers it shows. Read again after anything changes. Prefer read_window; use screenshot and click_at only when read_window shows too little.\n\
 - For a web page in Safari, Chrome, Arc, Brave, Edge or Vivaldi, use read_page, click_page and fill_page instead. If they say the browser doesn't allow it yet, tell the user the one step to allow it and carry on with read_window and click.\n\
+- For files in the home folder: find_files first, then read_file, open_file, move_files, rename_file, trash_files or new_folder with the paths it shows. Never guess paths.\n\
 - After a click that loads something, call wait (with text you expect to see) before reading again.\n\
 - To put text into an app, prefer type_text or fill_page; for long text, copy_text then press_keys cmd+v. Call read_clipboard only when the user refers to what they copied.\n\
 - The request may end with a <screen> block: the app, window, page and selected text in front of the user when they spoke. \"this\", \"it\", \"here\" and \"the selection\" mean that. Use it directly; read the window only for more.\n\

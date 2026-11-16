@@ -90,6 +90,13 @@ pub enum Call {
     FillPage { element: u32, text: String, submit: bool },
     CopyText { text: String },
     ReadClipboard,
+    FindFiles { query: String, kind: Option<super::files::Kind> },
+    ReadFile { path: String },
+    OpenFile { path: String, app: Option<String> },
+    MoveFiles { paths: Vec<String>, to: String },
+    RenameFile { path: String, name: String },
+    TrashFiles { paths: Vec<String> },
+    NewFolder { parent: String, name: String },
     Remember { text: String },
     Forget { text: String },
     SaveRoutine { name: String, steps: Vec<crate::routines::Step> },
@@ -129,6 +136,13 @@ impl Call {
             Call::FillPage { .. } => "fill_page",
             Call::CopyText { .. } => "copy_text",
             Call::ReadClipboard => "read_clipboard",
+            Call::FindFiles { .. } => "find_files",
+            Call::ReadFile { .. } => "read_file",
+            Call::OpenFile { .. } => "open_file",
+            Call::MoveFiles { .. } => "move_files",
+            Call::RenameFile { .. } => "rename_file",
+            Call::TrashFiles { .. } => "trash_files",
+            Call::NewFolder { .. } => "new_folder",
             Call::Remember { .. } => "remember",
             Call::Forget { .. } => "forget",
             Call::SaveRoutine { .. } => "save_routine",
@@ -139,7 +153,8 @@ impl Call {
     pub fn need(&self) -> Option<super::policy::Need> {
         use super::policy::Need;
         match self {
-            Call::ReadWindow { .. } | Call::Screenshot { .. } | Call::Wait { .. } | Call::ReadPage { .. } => Some(Need::See),
+            Call::ReadWindow { .. } | Call::Screenshot { .. } | Call::Wait { .. } | Call::ReadPage { .. } | Call::FindFiles { .. } | Call::ReadFile { .. } => Some(Need::See),
+            Call::OpenFile { .. } | Call::MoveFiles { .. } | Call::RenameFile { .. } | Call::TrashFiles { .. } | Call::NewFolder { .. } => Some(Need::Control),
             Call::Click { .. } | Call::TypeText { .. } | Call::PressKeys { .. } | Call::ChooseMenu { .. } | Call::Scroll { .. } | Call::ClickAt { .. } | Call::Drag { .. } | Call::ClickPage { .. } | Call::FillPage { .. } => {
                 Some(Need::Control)
             }
@@ -150,7 +165,12 @@ impl Call {
     /// Calls whose result carries content from outside (a window, a page, the clipboard): after one,
     /// the request is "tainted" and the gate asks before acting elsewhere or sending anything out.
     pub fn reveals(&self) -> bool {
-        matches!(self, Call::ReadWindow { .. } | Call::Screenshot { .. } | Call::ReadPage { .. } | Call::ReadClipboard)
+        matches!(self, Call::ReadWindow { .. } | Call::Screenshot { .. } | Call::ReadPage { .. } | Call::ReadClipboard | Call::FindFiles { .. } | Call::ReadFile { .. })
+    }
+
+    /// Calls on files in the home folder: gated like an app ("your files").
+    pub fn on_files(&self) -> bool {
+        matches!(self, Call::FindFiles { .. } | Call::ReadFile { .. } | Call::OpenFile { .. } | Call::MoveFiles { .. } | Call::RenameFile { .. } | Call::TrashFiles { .. } | Call::NewFolder { .. })
     }
 
     pub fn flags(&self) -> super::policy::Flags {
@@ -169,6 +189,10 @@ impl Call {
             Call::ListApps | Call::ListShortcuts | Call::ListWindows | Call::ReadWindow { .. } | Call::Screenshot { .. } | Call::Wait { .. } | Call::ReadPage { .. } | Call::ReadClipboard => Risk::Read,
             Call::Click { .. } | Call::TypeText { .. } | Call::PressKeys { .. } | Call::ChooseMenu { .. } | Call::Scroll { .. } | Call::ClickAt { .. } | Call::Drag { .. } => Risk::Safe,
             Call::ClickPage { .. } | Call::FillPage { .. } | Call::CopyText { .. } => Risk::Safe,
+            Call::FindFiles { .. } | Call::ReadFile { .. } => Risk::Read,
+            Call::OpenFile { .. } | Call::NewFolder { .. } => Risk::Safe,
+            Call::MoveFiles { .. } | Call::RenameFile { .. } => Risk::Change,
+            Call::TrashFiles { .. } => Risk::Confirm,
             Call::OpenApp { .. } | Call::OpenUrl { .. } | Call::WebSearch { .. } | Call::Media { .. } | Call::PlayMusic { .. } | Call::SetVolume { .. } | Call::DarkMode { .. } => Risk::Safe,
             Call::Remember { .. } | Call::Forget { .. } => Risk::Safe,
             Call::QuitApp { .. } | Call::CreateReminder { .. } | Call::CreateEvent { .. } | Call::CreateNote { .. } | Call::DraftEmail { .. } | Call::SaveRoutine { .. } => Risk::Change,
@@ -226,11 +250,31 @@ impl Call {
             Call::FillPage { element, text, submit } => format!("Filling page item {element} with “{}”{}", crate::agents::clip(text, 40), if *submit { " and submitting" } else { "" }),
             Call::CopyText { text } => format!("Copying “{}”", crate::agents::clip(text, 40)),
             Call::ReadClipboard => "Reading the clipboard".to_string(),
+            Call::FindFiles { query, .. } => format!("Finding files named “{query}”"),
+            Call::ReadFile { path } => format!("Reading {}", file_name(path)),
+            Call::OpenFile { path, app: Some(a) } => format!("Opening {} in {a}", file_name(path)),
+            Call::OpenFile { path, .. } => format!("Opening {}", file_name(path)),
+            Call::MoveFiles { paths, to } => format!("Move {} to {}", items(paths), file_name(to)),
+            Call::RenameFile { path, name } => format!("Rename {} to {name}", file_name(path)),
+            Call::TrashFiles { paths } => format!("Move {} to the Trash", items(paths)),
+            Call::NewFolder { parent, name } => format!("New folder “{name}” in {}", file_name(parent)),
             Call::Remember { text } => format!("Remembering: {text}"),
             Call::Forget { text } => format!("Forgetting “{text}”"),
             Call::SaveRoutine { name, steps } => format!("Save the routine “{name}”: {}", steps.iter().map(crate::routines::label).collect::<Vec<_>>().join(", ")),
         };
         crate::agents::clip(&s, 140)
+    }
+}
+
+fn file_name(p: &str) -> String {
+    let t = p.trim().trim_end_matches('/');
+    t.rsplit('/').next().filter(|n| !n.is_empty() && *n != "~").unwrap_or(t).to_string()
+}
+
+fn items(paths: &[String]) -> String {
+    match paths {
+        [one] => file_name(one),
+        many => format!("{} items", many.len()),
     }
 }
 
@@ -250,6 +294,7 @@ pub fn schemas() -> Value {
     let player = json!({ "type": "string", "enum": ["music", "spotify"], "description": "Optional. Default: Spotify if it is installed, else Music." });
     let local_time = "Local date and time, YYYY-MM-DDTHH:MM";
     let kind = json!({ "type": "string", "enum": ["double", "right", "hover"], "description": "Optional. Default: a normal click." });
+    let path_list = json!({ "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": 50, "description": "Paths like ~/Documents/a.pdf, as find_files shows them" });
     json!([
         s("list_apps", "List the names of the apps installed on this Mac.", json!({}), &[]),
         s("open_app", "Open (or switch to) an installed app by name.", json!({ "name": { "type": "string", "description": "App name, e.g. \"Spotify\"" } }), &["name"]),
@@ -281,6 +326,13 @@ pub fn schemas() -> Value {
         s("fill_page", "Fill a numbered text field, text area, editor or menu from the latest read_page (replaces what is there; for a menu, give the option's text). Set submit to submit the form. Never used for passwords or card numbers.", json!({ "element": { "type": "integer", "minimum": 1 }, "text": { "type": "string" }, "submit": { "type": "boolean" } }), &["element", "text"]),
         s("copy_text", "Put text on the clipboard (then press_keys cmd+v in an app to paste it).", json!({ "text": { "type": "string" } }), &["text"]),
         s("read_clipboard", "Read the text on the clipboard. Only when the user refers to what they copied.", json!({}), &[]),
+        s("find_files", "Find files and folders in the user's home folder by name (Spotlight), newest first, with their paths.", json!({ "query": { "type": "string", "description": "Words in the name" }, "kind": { "type": "string", "enum": ["folder", "pdf", "image", "document", "spreadsheet", "presentation", "audio", "video"] } }), &["query"]),
+        s("read_file", "Read the text of a document (text, PDF, Word, RTF, HTML) or list a folder, by the path find_files gave.", json!({ "path": { "type": "string" } }), &["path"]),
+        s("open_file", "Open a file or folder for the user, in its default app or the app named. Never opens apps, installers or scripts.", json!({ "path": { "type": "string" }, "app": { "type": "string" } }), &["path"]),
+        s("move_files", "Move files or folders into a folder. The user sees it first and can cancel; it can be undone.", json!({ "paths": path_list, "to": { "type": "string", "description": "The folder's path" } }), &["paths", "to"]),
+        s("rename_file", "Rename a file or folder (new name only, not a path). The user sees it first and can cancel; it can be undone.", json!({ "path": { "type": "string" }, "name": { "type": "string" } }), &["path", "name"]),
+        s("trash_files", "Move files or folders to the Trash. The user must approve it; it can be undone.", json!({ "paths": path_list }), &["paths"]),
+        s("new_folder", "Make a new folder inside a folder.", json!({ "parent": { "type": "string" }, "name": { "type": "string" } }), &["parent", "name"]),
         s("remember", "Save a short fact the user asked you to remember about them (a person, place, folder or preference), in their own words, e.g. \"Sara is my accountant, sara@example.com\". Only when the user asks to remember something.", json!({ "text": { "type": "string", "maxLength": 200 } }), &["text"]),
         s("forget", "Remove remembered facts that contain these words. Only when the user asks to forget something.", json!({ "text": { "type": "string" } }), &["text"]),
         s("save_routine", "Save a routine the user can run later by saying its name. Only when the user asks. Steps can only be these tools, with the same arguments as when you call them: open_app, quit_app, open_url, web_search, media, play_music, set_volume, dark_mode, run_shortcut. The user sees it first and can cancel it.", json!({ "name": { "type": "string", "description": "What the user will say, e.g. \"start my day\"" }, "steps": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "type": "object", "properties": { "tool": { "type": "string" }, "args": { "type": "object" } }, "required": ["tool", "args"] } } }), &["name", "steps"]),
@@ -374,6 +426,58 @@ struct ClickArgs {
     #[serde(default)]
     kind: ClickKind,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FindArgs {
+    query: String,
+    kind: Option<super::files::Kind>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PathArg {
+    path: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OpenFileArgs {
+    path: String,
+    app: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MoveArgs {
+    paths: Vec<String>,
+    to: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RenameArgs {
+    path: String,
+    name: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PathsArg {
+    paths: Vec<String>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FolderArgs {
+    parent: String,
+    name: String,
+}
+
+fn path(s: &str) -> Result<String, String> {
+    text("path", s, 1024, false)
+}
+
+fn paths(v: &[String]) -> Result<Vec<String>, String> {
+    if v.is_empty() || v.len() > 50 {
+        return Err("give 1 to 50 paths".into());
+    }
+    v.iter().map(|p| path(p)).collect()
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DragArgs {
@@ -692,6 +796,28 @@ pub fn parse(tool: &str, v: &Value, now: NaiveDateTime) -> Result<Call, String> 
             args::<Empty>(v)?;
             Call::ReadClipboard
         }
+        "find_files" => {
+            let a: FindArgs = args(v)?;
+            Call::FindFiles { query: name("query", &a.query)?, kind: a.kind }
+        }
+        "read_file" => Call::ReadFile { path: path(&args::<PathArg>(v)?.path)? },
+        "open_file" => {
+            let a: OpenFileArgs = args(v)?;
+            Call::OpenFile { path: path(&a.path)?, app: opt_text("app", a.app, 100, false)? }
+        }
+        "move_files" => {
+            let a: MoveArgs = args(v)?;
+            Call::MoveFiles { paths: paths(&a.paths)?, to: path(&a.to)? }
+        }
+        "rename_file" => {
+            let a: RenameArgs = args(v)?;
+            Call::RenameFile { path: path(&a.path)?, name: text("name", &a.name, 200, false)? }
+        }
+        "trash_files" => Call::TrashFiles { paths: paths(&args::<PathsArg>(v)?.paths)? },
+        "new_folder" => {
+            let a: FolderArgs = args(v)?;
+            Call::NewFolder { parent: path(&a.parent)?, name: text("name", &a.name, 200, false)? }
+        }
         "type_text" => {
             let a: TypeArgs = args(v)?;
             Call::TypeText { element: element(a.element)?, text: text("text", &a.text, 4000, true)?, submit: a.submit }
@@ -747,7 +873,7 @@ mod tests {
     fn every_schema_parses_and_names_match() {
         let list = schemas();
         let names: Vec<&str> = list.as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names.len(), 34);
+        assert_eq!(names.len(), 41);
         for n in &names {
             let e = p(n, json!({ "zzz": 1 })).unwrap_err();
             assert!(e.contains("invalid arguments") || e.contains("give a level"), "{n}: {e}");
@@ -867,6 +993,24 @@ mod tests {
         assert!(p("copy_text", json!({"text":"x\u{0007}"})).is_err());
         let c = p("read_clipboard", json!({})).unwrap();
         assert!(c.reveals() && c.need().is_none());
+    }
+
+    #[test]
+    fn file_tools() {
+        use crate::mac::policy::Need;
+        let f = p("find_files", json!({"query":"invoice","kind":"pdf"})).unwrap();
+        assert_eq!((f.risk(), f.need(), f.reveals(), f.on_files()), (Risk::Read, Some(Need::See), true, true));
+        assert!(p("find_files", json!({"query":"x","kind":"exe"})).is_err());
+        assert!(p("find_files", json!({"query":"-onlyin"})).is_err(), "never a flag");
+        assert_eq!(p("open_file", json!({"path":"~/Documents/a.pdf"})).unwrap().describe(), "Opening a.pdf");
+        let m = p("move_files", json!({"paths":["~/Desktop/a.pdf","~/Desktop/b.pdf"],"to":"~/Documents/Invoices"})).unwrap();
+        assert_eq!((m.risk(), m.describe()), (Risk::Change, "Move 2 items to Invoices".to_string()));
+        assert_eq!(p("rename_file", json!({"path":"~/a.txt","name":"b.txt"})).unwrap().risk(), Risk::Change);
+        let t = p("trash_files", json!({"paths":["~/Desktop/old.zip"]})).unwrap();
+        assert_eq!((t.risk(), t.describe()), (Risk::Confirm, "Move old.zip to the Trash".to_string()));
+        assert!(p("trash_files", json!({"paths":[]})).is_err());
+        assert!(p("move_files", json!({"paths":["~/a\u{0000}"],"to":"~/b"})).is_err());
+        assert!(!p("open_app", json!({"name":"Notes"})).unwrap().on_files());
     }
 
     #[test]

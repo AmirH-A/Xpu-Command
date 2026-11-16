@@ -155,6 +155,10 @@ Next: selected-text and screen context, a first-run setup guide, auto-update, no
 
 Security: see [SECURITY.md](SECURITY.md).
 
+## Roadmap
+
+What's built and what's next: [ROADMAP.md](ROADMAP.md).
+
 ## License
 
 Apache License 2.0: see [LICENSE](LICENSE) and [NOTICE](NOTICE). Privacy: [PRIVACY.md](PRIVACY.md). Terms: [TERMS.md](TERMS.md).
