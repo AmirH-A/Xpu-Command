@@ -33,7 +33,8 @@ body { margin: 0; display: grid; grid-template-columns: 196px 1fr; background: v
 .status { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; color: var(--muted); }
 .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .status.ok { color: var(--ok); } .status.bad { color: var(--live); }
-.legal { display: flex; gap: 10px; margin-top: 6px; }
+.legal { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; }
+.legal a { white-space: nowrap; }
 .legal a { font-size: 11px; color: var(--muted); text-decoration: none; }
 .legal a:hover { color: var(--ink); text-decoration: underline; }
 .saved { font-size: 11.5px; color: var(--muted); min-height: 16px; } .saved.err { color: var(--bad); }
@@ -175,3 +176,17 @@ html[data-size="larger"] body { zoom: 1.25; }
 .celebrate small { color: var(--muted); font-size: 12px; }
 @keyframes pop { from { transform: scale(.96); opacity: .4; } to { transform: none; opacity: 1; } }
 #tutorial .actions { margin-top: 10px; }
+
+[dir="rtl"] .side { border-right: 0; border-left: 1px solid var(--line); }
+[dir="rtl"] #pages button, [dir="rtl"] .seg button { text-align: right; }
+[dir="rtl"] #pages em { margin-left: 0; margin-right: auto; }
+[dir="rtl"] select { padding-right: 10px; padding-left: 26px; background-position: left 10px center; }
+[dir="rtl"] .switch::after { left: auto; right: 2px; }
+[dir="rtl"] .switch:checked::after { transform: translateX(-15px); }
+[dir="rtl"] .more summary::before { content: "‹"; margin-right: 0; margin-left: 6px; }
+[dir="rtl"] .more[open] summary::before { transform: rotate(-90deg); }
+[dir="rtl"] .actions .hint { margin-right: 0; margin-left: auto; }
+[dir="rtl"] .apps li b { text-align: left; padding-right: 0; padding-left: 6px; }
+[dir="rtl"] .apps small.warn { margin-left: 0; margin-right: 6px; }
+[dir="rtl"] .path, [dir="rtl"] .list time, [dir="rtl"] #key { direction: ltr; unicode-bidi: isolate; }
+[dir="rtl"] .list span, [dir="rtl"] .item small { unicode-bidi: plaintext; }

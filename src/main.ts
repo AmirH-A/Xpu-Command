@@ -1,8 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { t, setLang, resolve, LANGS, lang } from './i18n';
 
 type Settings = {
-  button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; live_words: boolean; instant: boolean; text_size: 'normal' | 'large' | 'larger'; tutorial_done: boolean; airpods: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
+  button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; live_words: boolean; instant: boolean; text_size: 'normal' | 'large' | 'larger'; tutorial_done: boolean; ui_language: string; airpods: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
   delivery: 'type_into_focused' | 'agent' | 'control_mac'; agent: 'claude' | 'codex' | 'custom'; custom_agent: string | null; project_dir: string | null; safety: 'read_only' | 'edit' | 'ask_commands'; conversation: boolean; memory: boolean;
   speak_summary: boolean; auto_submit: boolean; max_record_seconds: number; input_device: string | null; claude_profile: string | null; mac_model: 'haiku' | 'sonnet'; app_access: Record<string, Access>; allow_all_apps: boolean; step_by_step: boolean;
 };
@@ -57,7 +58,7 @@ function render() {
   $('type-box').hidden = s.delivery !== 'type_into_focused';
   $('agent-box').hidden = s.delivery !== 'agent';
   $('custom-box').hidden = s.agent !== 'custom';
-  $('custom-path').textContent = s.custom_agent ?? 'No program chosen';
+  $('custom-path').textContent = s.custom_agent ?? t('No program chosen');
   $('mac-box').hidden = s.delivery !== 'control_mac';
   $('claude-box').hidden = s.delivery === 'type_into_focused';
   $('profile-row').hidden = s.delivery === 'agent' && s.agent !== 'claude';
@@ -70,10 +71,10 @@ function render() {
   $('access-card').hidden = s.delivery !== 'control_mac';
   $('allow-all-warn').hidden = !s.allow_all_apps;
   renderApps();
-  $('project').textContent = s.project_dir ?? 'No project folder chosen';
+  $('project').textContent = s.project_dir ?? t('No project folder chosen');
   const m = models.find((x) => x.id === s.local_model);
   const size = m?.label.match(/\((\d+ MB)/)?.[1] ?? '';
-  $('model-state').textContent = `${size ? `${size} · ` : ''}${m?.downloaded ? 'ready' : 'not downloaded'}`;
+  $('model-state').textContent = `${size ? `${size} · ` : ''}${m?.downloaded ? t('ready') : t('not downloaded')}`;
   $('download-row').hidden = !!m?.downloaded;
   number();
   renderSetup();
@@ -134,7 +135,7 @@ function syncProgress() {
   document.querySelectorAll<HTMLElement>('.dl-fill').forEach((el) => (el.style.width = `${pct}%`));
   document.querySelectorAll<HTMLElement>('.dl-label').forEach((el) => {
     const size = Number(el.dataset.size || 0);
-    el.textContent = pct >= 100 ? 'Checking the fingerprint…' : size ? `${pct}% · ${Math.round((size * pct) / 100)} of ${size} MB` : `${pct}%`;
+    el.textContent = pct >= 100 ? t('Checking the fingerprint…') : size ? `${pct}% · ${Math.round((size * pct) / 100)} of ${size} MB` : `${pct}%`;
   });
   $('progress').style.width = `${pct}%`;
 }
@@ -159,9 +160,9 @@ function renderLessons() {
     n.textContent = done ? '✓' : String(i + 1);
     const text = document.createElement('div');
     const b = document.createElement('b');
-    b.textContent = `Say “${l.say}”`;
+    b.textContent = t('Say “{x}”', { x: l.say });
     const small = document.createElement('small');
-    small.textContent = done ? 'Done' : l.why;
+    small.textContent = done ? t('Done') : t(l.why);
     text.append(b, small);
     li.append(n, text);
     return li;
@@ -212,8 +213,8 @@ function renderSetup() {
   $('steps').hidden = tutorial;
   $('try-it').hidden = tutorial;
   $('tutorial').hidden = !tutorial;
-  $('setup-title').textContent = tutorial ? 'Try it' : 'Get started';
-  $('setup-sub').textContent = tutorial ? 'Three things to say. Each one ticks itself off when it works.' : 'A few steps, once.';
+  $('setup-title').textContent = t(tutorial ? 'Try it' : 'Get started');
+  $('setup-sub').textContent = t(tutorial ? 'Three things to say. Each one ticks itself off when it works.' : 'A few steps, once.');
   $('setup-count').textContent = left ? String(left) : '';
   $('setup-count').setAttribute('aria-label', left ? `${left} steps left` : '');
   if (tutorial) renderLessons();
@@ -226,9 +227,9 @@ function renderSetup() {
     n.textContent = st.done ? '✓' : String(i + 1);
     const text = document.createElement('div');
     const b = document.createElement('b');
-    b.textContent = st.title;
+    b.textContent = t(st.title);
     const small = document.createElement('small');
-    small.textContent = st.done ? 'Done' : st.why;
+    small.textContent = st.done ? t('Done') : t(st.why);
     text.append(b, small);
     li.append(n, text);
     if (!st.done && st.download && downloadPct !== null) {
@@ -236,7 +237,7 @@ function renderSetup() {
     } else if (!st.done) {
       const btn = document.createElement('button');
       btn.className = 'primary';
-      btn.textContent = st.label;
+      btn.textContent = t(st.label);
       btn.onclick = () => { Promise.resolve(st.act()).catch((e) => flash(String(e), true)); };
       li.append(btn);
     }
@@ -244,9 +245,9 @@ function renderSetup() {
   }));
   syncProgress();
   const how = s.mode === 'hold' ? `Hold ${BUTTON_NAME[s.button]} (or press ${s.hotkey ? 'the keyboard shortcut' : 'the button'}), say “hello”, and let go.` : `Click ${BUTTON_NAME[s.button]}, say “hello”, and pause.`;
-  $('try-it').textContent = p.needs_move ? 'After it reopens, allow Accessibility and the microphone here.' : `Then try it: ${how}`;
+  $('try-it').textContent = p.needs_move ? t('After it reopens, allow Accessibility and the microphone here.') : lang() === 'en' ? `Then try it: ${how}` : t('Then try it: Hold the button, say “hello”, and let go.');
   const st = $('status');
-  st.textContent = left === 0 ? 'Ready' : `${left} step${left === 1 ? '' : 's'} to finish`;
+  st.textContent = left === 0 ? t('Ready') : left === 1 ? t('1 step to finish') : t('{n} steps to finish', { n: left });
   st.className = `status ${left === 0 ? 'ok' : 'bad'}`;
 }
 
@@ -279,7 +280,7 @@ async function refreshProfiles() {
 }
 
 type ActivityEntry = { at: string; tool: string; summary: string; outcome: 'done' | 'failed' | 'cancelled' | 'declined' | 'refused'; detail: string };
-const OUTCOME: Record<ActivityEntry['outcome'], string> = { done: 'Done', failed: 'Failed', cancelled: 'Cancelled', declined: 'Not allowed', refused: 'Refused' };
+const OUTCOME: Record<ActivityEntry['outcome'], string> = { done: 'Done', failed: 'Failed', cancelled: 'Cancelled', declined: 'Declined', refused: 'Refused' };
 
 const ACCESS_LABEL: Record<Access, string> = { off: 'Off', see: 'See', control: 'Control', ask: 'Ask each time' };
 
@@ -298,7 +299,7 @@ function renderApps() {
     .filter((r) => !q || r.name.toLowerCase().includes(q) || r.bundle.toLowerCase().includes(q))
     .sort((a, b) => Number(levelOf(b) !== 'off') - Number(levelOf(a) !== 'off') || a.name.localeCompare(b.name));
   const allowed = appRows.filter((r) => levelOf(r) !== 'off').length;
-  $('app-count').textContent = `${allowed} of ${appRows.length} apps allowed`;
+  $('app-count').textContent = t('{a} of {b} apps allowed', { a: allowed, b: appRows.length });
   list.replaceChildren(...rows.slice(0, 300).map((r) => {
     const li = document.createElement('li');
     const name = document.createElement('span');
@@ -307,14 +308,14 @@ function renderApps() {
     li.append(name);
     if (r.class === 'excluded') {
       const b = document.createElement('b');
-      b.textContent = 'Never';
+      b.textContent = t('Never');
       b.title = 'Holds passwords or security settings, or is Xpu Command itself';
       li.append(b);
       return li;
     }
     if (r.class === 'terminal') {
       const w = document.createElement('small');
-      w.textContent = 'can run anything';
+      w.textContent = t('can run anything');
       w.className = 'warn';
       name.append(' ', w);
     }
@@ -322,7 +323,7 @@ function renderApps() {
     (['off', 'see', 'control', 'ask'] as Access[]).forEach((a) => {
       const o = document.createElement('option');
       o.value = a;
-      o.textContent = ACCESS_LABEL[a];
+      o.textContent = t(ACCESS_LABEL[a]);
       sel.append(o);
     });
     sel.value = levelOf(r);
@@ -349,7 +350,7 @@ async function refreshRoutines() {
   if (!rows.length) {
     const li = document.createElement('li');
     li.className = 'empty';
-    li.textContent = 'No routines yet.';
+    li.textContent = t('No routines yet.');
     list.replaceChildren(li);
   } else {
     list.replaceChildren(...rows.map((r) => {
@@ -363,11 +364,11 @@ async function refreshRoutines() {
       const btns = document.createElement('span');
       btns.className = 'buttons';
       const run = document.createElement('button');
-      run.textContent = 'Run';
+      run.textContent = t('Run');
       run.onclick = async () => { try { await invoke('routine_run', { id: r.id }); await refreshActivity(); } catch (e) { flash(String(e), true); } };
       const del = document.createElement('button');
       del.className = 'ghost';
-      del.textContent = 'Delete';
+      del.textContent = t('Delete');
       del.onclick = async () => { try { await invoke('routine_remove', { id: r.id }); await refreshRoutines(); } catch (e) { flash(String(e), true); } };
       btns.append(run, del);
       li.append(name, what, btns);
@@ -384,18 +385,18 @@ async function refreshRoutines() {
     const row = document.createElement('div');
     row.className = 'row folder';
     const input = document.createElement('input');
-    input.placeholder = 'Name to say, e.g. start my day';
+    input.placeholder = t('Name to say, e.g. start my day');
     input.maxLength = 40;
     const btns = document.createElement('span');
     btns.className = 'buttons';
     const save = document.createElement('button');
-    save.textContent = 'Save';
+    save.textContent = t('Save');
     save.onclick = async () => {
       try { await invoke('routine_save', { name: input.value, steps: g.steps }); flash('Routine saved'); await refreshRoutines(); } catch (e) { flash(String(e), true); }
     };
     const no = document.createElement('button');
     no.className = 'ghost';
-    no.textContent = 'Not now';
+    no.textContent = t('Not now');
     no.onclick = async () => { try { await invoke('routine_dismiss', { steps: g.steps }); await refreshRoutines(); } catch (e) { flash(String(e), true); } };
     btns.append(save, no);
     row.append(input, btns);
@@ -411,7 +412,7 @@ async function refreshMemory() {
   if (!facts.length) {
     const li = document.createElement('li');
     li.className = 'empty';
-    li.textContent = 'Nothing remembered yet.';
+    li.textContent = t('Nothing remembered yet.');
     list.replaceChildren(li);
     return;
   }
@@ -425,7 +426,7 @@ async function refreshMemory() {
     what.dir = 'auto';
     const del = document.createElement('button');
     del.className = 'ghost';
-    del.textContent = 'Remove';
+    del.textContent = t('Remove');
     del.onclick = async () => {
       try { await invoke('memory_remove', { id: f.id }); await refreshMemory(); } catch (e) { flash(String(e), true); }
     };
@@ -438,7 +439,7 @@ async function refreshUndo() {
   const what = await invoke<string[]>('undo_preview');
   const btn = $<HTMLButtonElement>('undo');
   btn.disabled = what.length === 0;
-  $('undo-what').textContent = what.length ? `Last request: ${what.join(', ')}` : '';
+  $('undo-what').textContent = what.length ? t('Last request: {x}', { x: what.join(', ') }) : '';
 }
 
 async function quietly(f: () => Promise<void>) {
@@ -456,7 +457,7 @@ async function refreshActivity() {
   if (!rows.length) {
     const li = document.createElement('li');
     li.className = 'empty';
-    li.textContent = 'Nothing yet.';
+    li.textContent = t('Nothing yet.');
     list.replaceChildren(li);
     return;
   }
@@ -469,7 +470,7 @@ async function refreshActivity() {
     what.title = r.detail;
     const out = document.createElement('b');
     out.className = r.outcome;
-    out.textContent = OUTCOME[r.outcome] ?? r.outcome;
+    out.textContent = t(OUTCOME[r.outcome] ?? r.outcome);
     if (r.tool === 'timing') {
       li.classList.add('timing');
       out.className = 'took';
@@ -506,15 +507,15 @@ async function refreshHealth() {
     mark.textContent = c.ok === true ? '✓' : c.ok === false ? '!' : '?';
     const text = document.createElement('div');
     const b = document.createElement('b');
-    b.textContent = c.title;
+    b.textContent = t(c.title);
     const small = document.createElement('small');
-    small.textContent = c.detail;
+    small.textContent = t(c.detail);
     text.append(b, small);
     li.setAttribute('aria-label', `${c.title}: ${c.ok === true ? 'OK' : c.ok === false ? 'needs attention' : 'unknown'}. ${c.detail}`);
     li.append(mark, text);
     if (c.fix) {
       const btn = document.createElement('button');
-      btn.textContent = FIX_LABEL[c.fix] ?? 'Fix';
+      btn.textContent = t(FIX_LABEL[c.fix] ?? 'Fix');
       btn.onclick = () => { fixIt(c.fix!).catch((e) => flash(String(e), true)); };
       li.append(btn);
     }
@@ -529,7 +530,7 @@ async function refreshStatus() {
   const p = await invoke<Perms>('permission_status');
   perms = p;
   hasKey = await invoke<boolean>('has_cloud_key');
-  $('screen-state').textContent = p.screen_recording ? 'Allowed' : "Optional, for apps that can't be read";
+  $('screen-state').textContent = t(p.screen_recording ? 'Allowed.' : "Optional, for apps that can't be read");
   $<HTMLButtonElement>('grant-screen').hidden = p.screen_recording;
   renderSetup();
   const knockErr = await invoke<string | null>('knock_status');
@@ -546,14 +547,15 @@ async function refreshStatus() {
     if (a.path) el.title = a.path;
     return el;
   }));
-  $('key-state').textContent = (await invoke<boolean>('has_cloud_key')) ? 'A key is saved in your keychain.' : 'No key saved.';
+  $('key-state').textContent = t((await invoke<boolean>('has_cloud_key')) ? 'A key is saved in your keychain.' : 'No key saved.');
 }
 
 function flash(msg: string, err = false) {
   const el = $('saved');
-  el.textContent = msg;
+  el.textContent = t(msg);
   el.className = `saved${err ? ' err' : ''}`;
-  if (!err) setTimeout(() => (el.textContent === msg ? (el.textContent = '') : null), 2500);
+  const shown = el.textContent;
+  if (!err) setTimeout(() => (el.textContent === shown ? (el.textContent = '') : null), 2500);
 }
 
 async function init() {
@@ -562,6 +564,12 @@ async function init() {
   });
   document.querySelectorAll<HTMLElement>('#pages button').forEach((a) => { a.onclick = () => showPage(a.dataset.page!); });
   s = await invoke<Settings>('get_settings');
+  const ui = $<HTMLSelectElement>('ui_language');
+  ui.replaceChildren(new Option(t('System default'), 'system'), ...LANGS.map((l) => new Option(l.name, l.id)));
+  ui.value = s.ui_language ?? 'system';
+  setLang(resolve(ui.value));
+  ui.options[0].text = t('System default');
+  ui.onchange = () => { s.ui_language = ui.value; setLang(resolve(ui.value)); ui.options[0].text = t('System default'); render(); void refreshStatus(); };
   savedJson = JSON.stringify(s);
   await refreshModels();
   await refreshDevices();

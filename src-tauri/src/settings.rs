@@ -105,6 +105,7 @@ pub struct Settings {
     pub instant: bool,
     pub text_size: TextSize,
     pub tutorial_done: bool,
+    pub ui_language: String,
     /// Press AirPods (or any headset play button) to talk.
     #[serde(alias = "airpods_press", deserialize_with = "airpods_on")]
     pub airpods: bool,
@@ -152,6 +153,7 @@ impl Default for Settings {
             instant: true,
             text_size: TextSize::Normal,
             tutorial_done: false,
+            ui_language: "system".into(),
             airpods: false,
             conversation: true,
             memory: true,
@@ -189,6 +191,9 @@ impl Settings {
         let lang_ok = self.language == "auto" || (self.language.len() == 2 && self.language.chars().all(|c| c.is_ascii_lowercase()));
         if !lang_ok {
             return Err(msg("language must be \"auto\" or a two-letter code"));
+        }
+        if !["system", "en", "fa", "es", "de", "fr", "ar", "zh", "ja"].contains(&self.ui_language.as_str()) {
+            return Err(msg("unknown app language"));
         }
         if !(5..=600).contains(&self.max_record_seconds) {
             return Err(msg("max recording length must be 5–600 seconds"));
