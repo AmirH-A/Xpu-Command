@@ -3,6 +3,7 @@
 //!   xpu-command --selftest-agent <claude|codex> <dir> <prompt…>   run an agent headless, print events
 //!   xpu-command --selftest-mac-tool <tool> '<json>'    validate and run one Mac tool directly (no model, no gate)
 //!   xpu-command --selftest-mac-tools '[["tool",{…}],…]' several tools in one session (no gate)
+//!   xpu-command --selftest-context                    what "this" would send right now (all apps allowed)
 //!   xpu-command --selftest-mac "<request>"             the whole Mac pipeline with a console "pill";
 //!                                                       XPU_PRESS=1 presses (cancel/approve) after 1 s;
 //!                                                       XPU_ALLOW="com.apple.calculator=control,…" app access
@@ -94,6 +95,13 @@ pub fn maybe_run() -> bool {
             true
         }
         #[cfg(target_os = "macos")]
+        Some("--selftest-context") => {
+            let policy = crate::mac::policy::Policy { allow_all: true, ..Default::default() };
+            let c = crate::mac::ui::context(&policy);
+            println!("{c:?}");
+            println!("{}", crate::mac::with_context("reply to this", c.as_ref()));
+            true
+        }
         Some("--selftest-mac-tools") => {
             let steps: Vec<(String, serde_json::Value)> = serde_json::from_str(&args[2]).expect("a JSON list of [tool, args]");
             let exec = crate::mac::exec::MacExec::new(Default::default(), crate::mac::workspace().unwrap());
@@ -316,17 +324,24 @@ fn mac_request(text: &str) {
             };
             policy.levels.insert(b.to_string(), level);
         }
+        let context = crate::mac::ui::context(&policy);
+        if let Some(c) = &context {
+            println!("CONTEXT {}", c.summary());
+        }
+        let seen = context.iter().filter(|c| c.selection.is_some()).map(|c| c.bundle.clone()).collect();
+        let full = crate::mac::with_context(text, context.as_ref());
         let exec = std::sync::Arc::new(crate::mac::exec::MacExec::new(policy.clone(), crate::mac::workspace().unwrap()));
-        let server = crate::mac::server::start(std::sync::Arc::new(ConsoleHost), exec, policy, Default::default()).await.unwrap();
+        let server = crate::mac::server::start(std::sync::Arc::new(ConsoleHost), exec, policy, Default::default(), seen).await.unwrap();
         let config = crate::mac::McpConfigFile::create(&crate::settings::config_dir().unwrap(), &server.mcp_config()).unwrap();
         let workspace = crate::mac::workspace().unwrap();
-        let prompt = crate::mac::system_prompt(chrono::Local::now(), &crate::memory::prompt_block(&crate::memory::list()));
+        let lang = crate::speech::language_of(text, "en").unwrap_or("en");
+        let prompt = crate::mac::system_prompt(chrono::Local::now(), &crate::memory::prompt_block(&crate::memory::list()), lang);
         let profile = std::env::var("XPU_CLAUDE_PROFILE").ok().map(|p| settings::claude_profile_dir(&p).expect("bad profile"));
         let model = std::env::var("XPU_MODEL").unwrap_or_else(|_| "haiku".into());
         let started = std::time::Instant::now();
         let req = agents::Request {
             kind: settings::AgentKind::Claude,
-            prompt: text,
+            prompt: &full,
             project: &workspace,
             safety: settings::Safety::ReadOnly,
             resume: None,

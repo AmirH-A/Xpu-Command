@@ -5,7 +5,7 @@ import { t, setLang, resolve, LANGS, lang } from './i18n';
 type Settings = {
   button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; live_words: boolean; instant: boolean; text_size: 'normal' | 'large' | 'larger'; tutorial_done: boolean; ui_language: string; airpods: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
   delivery: 'type_into_focused' | 'agent' | 'control_mac'; agent: 'claude' | 'codex' | 'custom'; custom_agent: string | null; project_dir: string | null; safety: 'read_only' | 'edit' | 'ask_commands'; conversation: boolean; memory: boolean;
-  speak_summary: boolean; auto_submit: boolean; max_record_seconds: number; input_device: string | null; claude_profile: string | null; mac_model: 'haiku' | 'sonnet'; app_access: Record<string, Access>; allow_all_apps: boolean; step_by_step: boolean;
+  speak_summary: boolean; auto_submit: boolean; max_record_seconds: number; input_device: string | null; claude_profile: string | null; mac_model: 'haiku' | 'sonnet'; app_access: Record<string, Access>; allow_all_apps: boolean; step_by_step: boolean; share_context: boolean;
 };
 type ModelRow = { id: string; label: string; downloaded: boolean };
 type AgentInfo = { kind: 'Claude' | 'Codex' | 'claude' | 'codex'; found: boolean; path: string | null };
@@ -44,7 +44,7 @@ type Access = 'off' | 'see' | 'control' | 'ask';
 type AppRow = { bundle: string; name: string; class: 'normal' | 'terminal' | 'excluded' };
 let appRows: AppRow[] = [];
 
-function bindCheck(key: 'auto_submit' | 'speak_summary' | 'knock' | 'allow_all_apps' | 'step_by_step' | 'auto_stop' | 'sound_cues' | 'conversation' | 'memory' | 'live_words' | 'instant') {
+function bindCheck(key: 'auto_submit' | 'speak_summary' | 'knock' | 'allow_all_apps' | 'step_by_step' | 'share_context' | 'auto_stop' | 'sound_cues' | 'conversation' | 'memory' | 'live_words' | 'instant') {
   const el = $<HTMLInputElement>(key);
   el.checked = s[key];
   el.onchange = () => { s[key] = el.checked; render(); };
@@ -603,6 +603,7 @@ async function init() {
   bindCheck('memory');
   bindCheck('allow_all_apps');
   bindCheck('step_by_step');
+  bindCheck('share_context');
   try { appRows = await invoke<AppRow[]>('app_access_list'); } catch { appRows = []; }
   $<HTMLInputElement>('app-filter').oninput = renderApps;
   $('grant-screen').onclick = async () => {

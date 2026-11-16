@@ -2,6 +2,21 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
+## Unreleased
+
+### Added
+- **Web pages.** In Safari, Chrome, Arc, Brave, Edge and Vivaldi, Control my Mac reads the page itself, clicks links and buttons, fills fields and menus, and submits forms. Clicks also reach buttons that only react to a real mouse press. You allow it once in the browser: Develop › Allow JavaScript from Apple Events in Safari, or View › Developer › Allow JavaScript from Apple Events in Chrome-based browsers.
+- **"This".** Each request carries the app in front and, for apps the assistant may see, the window title, the page address and your selected text, so "reply to this" or "translate what I selected" works. Activity shows what was shared, and **Include what's in front** in Apps turns it off.
+- **More of the mouse.** Right-click (the menu's items can then be chosen), double-click, hover, and drag, such as a file onto a folder or into another app.
+- **Clipboard.** The assistant can copy text to paste with ⌘V (undo puts back what you had) and read what you copied when you mention it. Items that password managers mark as secret are never read.
+- **Wait.** The assistant waits for a page to load or for text to appear before going on, instead of acting too early.
+
+### Changed
+- The spoken answer stays in the language you spoke, even when the request was to translate.
+
+### Safety
+- Every new action goes through the same App access gate. Your selected text and anything read from a page or the clipboard count as read, so sending anything out or acting in another app afterwards needs your yes. Submitting a form whose button says Send, Pay, Delete and the like needs your yes. Password, card-number and one-time-code fields are never read or filled.
+
 ## 0.7.0 (2026-11-16)
 
 ### Added

@@ -133,9 +133,12 @@ fn new_token() -> String {
     format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple())
 }
 
-/// The "Control my Mac" server: Mac tools, gated by App access.
-pub async fn start(host: Arc<dyn Host>, exec: Arc<dyn Exec>, policy: Policy, limits: Limits) -> std::io::Result<Server> {
-    serve(host, Toolset::Mac { exec, policy, run: Default::default() }, limits, "mac").await
+/// The "Control my Mac" server: Mac tools, gated by App access. `seen`: apps whose content the
+/// request already carries (the user's selected text); the gate treats them as read, so acting
+/// elsewhere or sending anything out needs a yes.
+pub async fn start(host: Arc<dyn Host>, exec: Arc<dyn Exec>, policy: Policy, limits: Limits, seen: Vec<String>) -> std::io::Result<Server> {
+    let run = RunState { read_apps: seen.into_iter().collect(), ..Default::default() };
+    serve(host, Toolset::Mac { exec, policy, run: parking_lot::Mutex::new(run) }, limits, "mac").await
 }
 
 /// The approvals server: one `approve` tool for Claude Code's `--permission-prompt-tool`.
@@ -337,14 +340,26 @@ fn describe(call: &Call, target: Option<&Target>) -> String {
     let Some(t) = target else { return base };
     let label = t.label.as_deref().map(|l| crate::agents::clip(l, 60));
     let s = match (call, label) {
-        (Call::Click { .. }, Some(l)) => format!("Clicking {l} in {}", t.name),
         (Call::TypeText { text, submit, .. }, Some(l)) => {
             format!("Typing “{}” into {l} in {}{}", crate::agents::clip(text, 40), t.name, if *submit { ", then Return" } else { "" })
         }
-        (Call::ClickAt { .. }, Some(l)) => format!("Clicking {l} in {}", t.name),
+        (Call::ClickAt { kind, .. } | Call::Click { kind, .. } | Call::ClickPage { kind, .. }, Some(l)) => format!("{} {l} in {}", verb(*kind), t.name),
+        (Call::FillPage { text, submit, .. }, Some(l)) => {
+            format!("Filling {l} in {} with “{}”{}", t.name, crate::agents::clip(text, 40), if *submit { ", then submitting" } else { "" })
+        }
+        (Call::Drag { .. }, Some(l)) => format!("Dragging {l} in {}", t.name),
         _ => base,
     };
     crate::agents::clip(&s, 140)
+}
+
+fn verb(kind: tools::ClickKind) -> &'static str {
+    match kind {
+        tools::ClickKind::Left => "Clicking",
+        tools::ClickKind::Double => "Double-clicking",
+        tools::ClickKind::Right => "Right-clicking",
+        tools::ClickKind::Hover => "Pointing at",
+    }
 }
 
 /// Waits for the user's press: true if pressed within `wait`.
@@ -435,14 +450,14 @@ async fn call_tool(st: &State, name: &str, args: &Value) -> (Output, bool) {
     let r = tokio::task::spawn_blocking(move || exec.run(&c, t.as_ref())).await.unwrap_or_else(|_| Err("the action crashed".into()));
     match r {
         Ok(out) => {
-            if let (Some(t), Some(policy::Need::See)) = (&target, call.need()) {
-                st_run.lock().read_apps.insert(t.bundle.clone());
+            if call.reveals() {
+                st_run.lock().read_apps.insert(target.as_ref().map_or_else(|| "clipboard".to_string(), |t| t.bundle.clone()));
             }
             let summary = match &out {
                 Output::Text(m) => m.clone(),
                 Output::Image { text, .. } => text.clone(),
             };
-            let detail = if call.need() == Some(policy::Need::See) { "read".to_string() } else { summary };
+            let detail = if call.reveals() { "read".to_string() } else { summary };
             st.host.record(call.tool(), &what, Outcome::Done, &detail);
             match out {
                 Output::Text(m) => text(crate::agents::clip_raw(&m, 20_000), false),
@@ -515,7 +530,7 @@ mod tests {
     impl Exec for FakeExec {
         fn target(&self, c: &Call) -> Result<Option<Target>, String> {
             let app = match c {
-                Call::ReadWindow { app } | Call::Screenshot { app } | Call::PressKeys { app, .. } | Call::Scroll { app, .. } | Call::ChooseMenu { app, .. } => app.clone(),
+                Call::ReadWindow { app } | Call::Screenshot { app } | Call::PressKeys { app, .. } | Call::Scroll { app, .. } | Call::ChooseMenu { app, .. } | Call::Wait { app, .. } => app.clone(),
                 Call::Click { .. } | Call::TypeText { .. } => "Chrome".into(),
                 _ => return Ok(None),
             };
@@ -527,7 +542,7 @@ mod tests {
                 _ => return Err(format!("{app} has no window open")),
             };
             let label = match c {
-                Call::Click { element: 99 } => Some("button Send".to_string()),
+                Call::Click { element: 99, .. } => Some("button Send".to_string()),
                 Call::Click { .. } => Some("button Compose".to_string()),
                 _ => None,
             };
@@ -556,7 +571,7 @@ mod tests {
     async fn serve_with(press: Option<Duration>, policy: Policy) -> (Server, Arc<FakeHost>, Arc<FakeExec>) {
         let host = Arc::new(FakeHost { press_after: press, ..Default::default() });
         let exec = Arc::new(FakeExec::default());
-        let s = start(host.clone(), exec.clone(), policy, quick()).await.unwrap();
+        let s = start(host.clone(), exec.clone(), policy, quick(), Vec::new()).await.unwrap();
         (s, host, exec)
     }
 
@@ -594,7 +609,7 @@ mod tests {
         let (c, _) = post(&s, json!({"jsonrpc":"2.0","method":"notifications/initialized"})).await;
         assert_eq!(c, 202);
         let (_, v) = post(&s, json!({"jsonrpc":"2.0","id":2,"method":"tools/list"})).await;
-        assert_eq!(v["result"]["tools"].as_array().unwrap().len(), 27);
+        assert_eq!(v["result"]["tools"].as_array().unwrap().len(), 34);
         let (_, v) = post(&s, json!({"jsonrpc":"2.0","id":3,"method":"resources/list"})).await;
         assert_eq!(v["error"]["code"], -32601);
     }
@@ -729,6 +744,25 @@ mod tests {
         assert!(t.contains("did not approve"), "acting on another app after reading needs a yes: {t}");
         assert_eq!(*exec.0.lock(), ["read_window", "click"]);
         assert!(host.log.lock().iter().any(|l| l == "highlight true"));
+    }
+
+    #[tokio::test]
+    async fn selected_text_and_the_clipboard_count_as_read() {
+        let p = allow(&[("com.google.Chrome", Access::Control), ("com.apple.Notes", Access::Control)]);
+        let host = Arc::new(FakeHost::default());
+        let exec = Arc::new(FakeExec::default());
+        let s = start(host, exec.clone(), p.clone(), quick(), vec!["com.google.Chrome".into()]).await.unwrap();
+        assert!(!call(&s, "press_keys", json!({"app":"Chrome","keys":"cmd+c"})).await.1, "the app it came from: fine");
+        assert!(call(&s, "open_url", json!({"url":"https://a.example"})).await.0.contains("did not approve"), "sending out needs a yes");
+        assert!(call(&s, "press_keys", json!({"app":"Notes","keys":"cmd+v"})).await.0.contains("did not approve"), "another app needs a yes");
+
+        let (s, _, exec2) = serve_with(None, p).await;
+        assert!(!call(&s, "web_search", json!({"query":"x"})).await.1, "nothing read yet");
+        assert!(!call(&s, "read_clipboard", json!({})).await.1);
+        assert!(call(&s, "web_search", json!({"query":"y"})).await.0.contains("did not approve"), "after reading the clipboard");
+        assert!(!call(&s, "wait", json!({"app":"Chrome","text":"Done"})).await.1);
+        assert_eq!(*exec.0.lock(), ["press_keys"]);
+        assert_eq!(*exec2.0.lock(), ["web_search", "read_clipboard", "wait"]);
     }
 
     #[tokio::test]

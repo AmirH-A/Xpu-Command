@@ -57,6 +57,8 @@ const EN = [
   "Checking the fingerprint…",
   "Moving to Applications…",
   "After it reopens, allow Accessibility and the microphone here.",
+  "Include what's in front",
+  "Each request also sends the front app, and for apps the assistant may see, the window title, page address and selected text.",
 ] as const;
 
 type Same<T extends readonly unknown[]> = { readonly [K in keyof T]: string };
@@ -109,6 +111,8 @@ const FA: Tr = [
   "در حال بررسی اثر انگشت…",
   "در حال انتقال به Applications…",
   "بعد از باز شدن دوباره، Accessibility و میکروفون را همین‌جا اجازه بده.",
+  "فرستادن چیزی که جلوی چشم است",
+  "هر درخواست نام برنامهٔ جلو را هم می‌فرستد، و برای برنامه‌هایی که دستیار اجازهٔ دیدنشان را دارد، عنوان پنجره، نشانی صفحه و متن انتخاب‌شده را.",
 ];
 
 const ES: Tr = [
@@ -158,6 +162,8 @@ const ES: Tr = [
   "Comprobando la huella…",
   "Moviendo a Aplicaciones…",
   "Cuando se vuelva a abrir, permite aquí Accesibilidad y el micrófono.",
+  "Incluir lo que está delante",
+  "Cada petición envía también la app en primer plano y, en las apps que el asistente puede ver, el título de la ventana, la dirección de la página y el texto seleccionado.",
 ];
 
 const DE: Tr = [
@@ -207,6 +213,8 @@ const DE: Tr = [
   "Fingerabdruck wird geprüft…",
   "Wird in Programme bewegt…",
   "Erlaube nach dem Neustart hier Bedienungshilfen und das Mikrofon.",
+  "Einbeziehen, was vorne ist",
+  "Jede Anfrage sendet auch die App im Vordergrund und, bei Apps, die der Assistent sehen darf, den Fenstertitel, die Seitenadresse und den markierten Text.",
 ];
 
 const FR: Tr = [
@@ -256,6 +264,8 @@ const FR: Tr = [
   "Vérification de l’empreinte…",
   "Déplacement dans Applications…",
   "Après la réouverture, autorisez ici l’Accessibilité et le micro.",
+  "Inclure ce qui est au premier plan",
+  "Chaque demande envoie aussi l’app au premier plan et, pour les apps que l’assistant peut voir, le titre de la fenêtre, l’adresse de la page et le texte sélectionné.",
 ];
 
 const AR: Tr = [
@@ -305,6 +315,8 @@ const AR: Tr = [
   "جارٍ التحقق من البصمة…",
   "جارٍ النقل إلى التطبيقات…",
   "بعد إعادة الفتح، اسمح بإمكانية الوصول والميكروفون هنا.",
+  "تضمين ما في الواجهة",
+  "يرسل كل طلب أيضًا اسم التطبيق في الواجهة، وللتطبيقات التي يُسمح للمساعد برؤيتها: عنوان النافذة وعنوان الصفحة والنص المحدد.",
 ];
 
 const ZH: Tr = [
@@ -354,6 +366,8 @@ const ZH: Tr = [
   "正在校验指纹…",
   "正在移到“应用程序”…",
   "重新打开后，在这里允许辅助功能和麦克风。",
+  "包含前台内容",
+  "每个请求还会发送前台应用；对于允许助手查看的应用，还会发送窗口标题、网页地址和所选文字。",
 ];
 
 const JA: Tr = [
@@ -403,6 +417,8 @@ const JA: Tr = [
   "フィンガープリントを確認中…",
   "アプリケーションに移動中…",
   "開き直したら、ここでアクセシビリティとマイクを許可してください。",
+  "手前にあるものを含める",
+  "各リクエストで前面のアプリも送信します。アシスタントが見てよいアプリでは、ウインドウのタイトル、ページのアドレス、選択したテキストも送信します。",
 ];
 
 const TABLES: Record<Exclude<Lang, 'en'>, Tr> = { fa: FA, es: ES, de: DE, fr: FR, ar: AR, zh: ZH, ja: JA };

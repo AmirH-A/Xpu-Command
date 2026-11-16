@@ -886,15 +886,27 @@ impl Controller {
         };
         let host = Arc::new(MacHost { ctl: self.clone(), app: app.clone(), speak: s.speak_summary });
         let policy = s.mac_policy();
+        let context = if s.share_context {
+            let p = policy.clone();
+            tokio::task::spawn_blocking(move || crate::mac::ui::context(&p)).await.ok().flatten()
+        } else {
+            None
+        };
+        if let Some(c) = &context {
+            crate::activity::record("context", &c.summary(), crate::mac::server::Outcome::Done, "");
+        }
+        let seen: Vec<String> = context.iter().filter(|c| c.selection.is_some()).map(|c| c.bundle.clone()).collect();
         let exec = Arc::new(crate::mac::exec::MacExec::new(policy.clone(), workspace.clone()).with_memory(s.memory));
-        let server = crate::mac::server::start(host, exec, policy, Default::default()).await?;
+        let server = crate::mac::server::start(host, exec, policy, Default::default(), seen).await?;
         let config = crate::mac::McpConfigFile::create(&crate::settings::config_dir()?, &server.mcp_config())?;
         let memory = if s.memory { crate::memory::prompt_block(&crate::memory::list()) } else { String::new() };
-        let prompt = crate::mac::system_prompt(chrono::Local::now(), &memory);
+        let lang = speech::language_of(text, &s.language).unwrap_or("en");
+        let prompt = crate::mac::system_prompt(chrono::Local::now(), &memory, lang);
         let profile = s.claude_profile.as_deref().map(crate::settings::claude_profile_dir).transpose()?;
+        let full = crate::mac::with_context(text, context.as_ref());
         let run = agents::start(agents::Request {
             kind: crate::settings::AgentKind::Claude,
-            prompt: text,
+            prompt: &full,
             project: &workspace,
             safety: crate::settings::Safety::ReadOnly,
             resume: resume.as_deref(),

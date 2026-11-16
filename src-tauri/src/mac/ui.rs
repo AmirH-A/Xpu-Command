@@ -111,6 +111,11 @@ fn screen_windows() -> Vec<ScreenWindow> {
     out
 }
 
+/// The app in front: the one with keyboard focus, else the owner of the frontmost window.
+pub fn front_pid() -> Option<i32> {
+    ax::focused_pid().or_else(|| screen_windows().first().map(|w| w.0))
+}
+
 /// Apps with a window on screen, front to back (live).
 pub fn apps_on_screen() -> Vec<RunningApp> {
     let mut seen: Vec<i32> = Vec::new();
@@ -153,13 +158,13 @@ pub fn window_frame(pid: i32) -> Option<(f64, f64, f64, f64)> {
 
 /// Brings the app to the front (via LaunchServices) and waits until it has keyboard focus.
 pub fn activate(app: &RunningApp) -> Result<(), String> {
-    if ax::focused_pid() == Some(app.pid) {
+    if front_pid() == Some(app.pid) {
         return Ok(());
     }
     super::exec::run_program("/usr/bin/open", &["-b".as_ref(), app.bundle.as_ref()], Duration::from_secs(10))?;
     let start = Instant::now();
     while start.elapsed() < Duration::from_millis(2500) {
-        if ax::focused_pid() == Some(app.pid) {
+        if front_pid() == Some(app.pid) {
             std::thread::sleep(Duration::from_millis(120));
             return Ok(());
         }
@@ -240,6 +245,11 @@ impl Session {
         let title = win.string("AXTitle").unwrap_or_default();
         let mut out = format!("{} — window “{}”\n", app.name, one_line(&title, 120));
         let mut stack: Vec<(El, u16)> = vec![(win, 0)];
+        let menus: Vec<El> = El::app(app.pid).elements("AXChildren").into_iter().filter(|c| c.string("AXRole").as_deref() == Some("AXMenu")).collect();
+        if !menus.is_empty() {
+            out.push_str("A menu is open; its items come first:\n");
+            stack.extend(menus.into_iter().map(|m| (m, 0)));
+        }
         let (mut visited, mut listed) = (0usize, 0usize);
         let mut last_label = String::new();
         let mut truncated = false;
@@ -342,18 +352,83 @@ impl Session {
     }
 
 
-    pub fn click(&self, id: u32) -> Result<String, String> {
+    pub fn click(&self, id: u32, kind: ClickKind) -> Result<String, String> {
         trusted()?;
         let (el, pid, label) = self.entry(id)?;
-        if el.actions().iter().any(|a| a == "AXPress") {
-            el.perform("AXPress")?;
-            return Ok(format!("Clicked {label}"));
+        let actions = el.actions();
+        let done = |verb: &str| Ok(format!("{verb} {label}"));
+        match kind {
+            ClickKind::Left if actions.iter().any(|a| a == "AXPress") => {
+                el.perform("AXPress")?;
+                return done("Clicked");
+            }
+            ClickKind::Right if el.frame().is_none() && actions.iter().any(|a| a == "AXShowMenu") => {
+                match el.perform("AXShowMenu") {
+                    Err(e) if !e.contains("in time") => return Err(e),
+                    _ => return Ok(format!("Opened the menu of {label}; read_window lists its items")),
+                }
+            }
+            _ => {}
         }
         let (x, y, w, h) = el.frame().ok_or("that control has no position")?;
         let app = app_of_pid(pid).ok_or("that app has quit")?;
         activate(&app)?;
-        mouse_click(&app, x + w / 2.0, y + h / 2.0)?;
-        Ok(format!("Clicked {label}"))
+        mouse(&app, x + w / 2.0, y + h / 2.0, kind)?;
+        if kind == ClickKind::Right {
+            return Ok(format!("Right-clicked {label}; read_window lists the menu's items"));
+        }
+        done(past(kind))
+    }
+
+    /// Drags one numbered control onto another (in the same app or another one), as a person would:
+    /// press, move in small steps, release. Both spots must really show those apps.
+    pub fn drag(&self, from: u32, to: u32) -> Result<String, String> {
+        trusted()?;
+        let (a, apid, alabel) = self.entry(from)?;
+        let (b, bpid, blabel) = self.entry(to)?;
+        let (ax_, ay, aw, ah) = a.frame().ok_or("the control to drag has no position")?;
+        let (bx, by, bw, bh) = b.frame().ok_or("the drop target has no position")?;
+        let src = app_of_pid(apid).ok_or("that app has quit")?;
+        activate(&src)?;
+        let (p, q) = ((ax_ + aw / 2.0, ay + ah / 2.0), (bx + bw / 2.0, by + bh / 2.0));
+        if ax::element_at(p.0, p.1).and_then(|e| e.pid()) != Some(apid) {
+            return Err(format!("something covers {alabel}; not dragging"));
+        }
+        if ax::element_at(q.0, q.1).and_then(|e| e.pid()) != Some(bpid) {
+            return Err(format!("{blabel} is covered by another window; put the two windows side by side and try again"));
+        }
+        mouse_drag(p, q)?;
+        Ok(format!("Dragged {alabel} onto {blabel}"))
+    }
+
+    /// Whether the app's front window shows `needle` (any title, value or description), case-insensitive.
+    pub fn window_has(&self, app: &RunningApp, needle: &str) -> Result<bool, String> {
+        trusted()?;
+        self.enable_web(app.pid);
+        let win = main_window(app.pid).ok_or_else(|| format!("{} has no window", app.name))?;
+        let needle = needle.to_lowercase();
+        let mut stack = vec![(win, 0u16)];
+        let mut visited = 0;
+        while let Some((el, depth)) = stack.pop() {
+            visited += 1;
+            if visited > MAX_VISIT {
+                break;
+            }
+            let v = el.attrs(&["AXTitle", "AXValue", "AXDescription", "AXChildren"]);
+            for x in &v[..3] {
+                if let V::Str(t) = x {
+                    if t.to_lowercase().contains(&needle) {
+                        return Ok(true);
+                    }
+                }
+            }
+            if let V::Els(children) = &v[3] {
+                if depth < 60 {
+                    stack.extend(children.iter().map(|c| (c.clone(), depth + 1)));
+                }
+            }
+        }
+        Ok(false)
     }
 
     pub fn type_text(&self, id: u32, text: &str, submit: bool) -> Result<String, String> {
@@ -477,11 +552,11 @@ impl Session {
         Ok(Target { bundle: app.bundle.clone(), name: app.name.clone(), pid: app.pid, need: Need::Control, unknown_spot: label.is_none(), label, frame: window_frame(app.pid) })
     }
 
-    pub fn click_at(&self, app: &RunningApp, x: f64, y: f64) -> Result<String, String> {
+    pub fn click_at(&self, app: &RunningApp, x: f64, y: f64, kind: ClickKind) -> Result<String, String> {
         let (px, py) = self.point_from_shot(app.pid, x, y)?;
         activate(app)?;
-        mouse_click(app, px, py)?;
-        Ok(format!("Clicked at ({x:.0}, {y:.0}) in {}", app.name))
+        mouse(app, px, py, kind)?;
+        Ok(format!("{} ({x:.0}, {y:.0}) in {}", past(kind), app.name))
     }
 }
 
@@ -512,7 +587,8 @@ fn child_text(el: &El) -> String {
 }
 
 
-use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation, CGEventType, CGMouseButton, ScrollEventUnit};
+use super::tools::ClickKind;
+use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation, CGEventType, CGMouseButton, EventField, ScrollEventUnit};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 use core_graphics::geometry::CGPoint;
 
@@ -577,18 +653,98 @@ fn type_into(pid: i32, text: &str) -> Result<(), String> {
     flush(&mut chunk)
 }
 
-/// A left click at a screen point, only if that point belongs to the app.
-fn mouse_click(app: &RunningApp, x: f64, y: f64) -> Result<(), String> {
+fn past(kind: ClickKind) -> &'static str {
+    match kind {
+        ClickKind::Left => "Clicked",
+        ClickKind::Double => "Double-clicked",
+        ClickKind::Right => "Right-clicked",
+        ClickKind::Hover => "Pointed at",
+    }
+}
+
+fn post_mouse(ty: CGEventType, p: CGPoint, button: CGMouseButton, clicks: i64) -> Result<(), String> {
+    let e = CGEvent::new_mouse_event(source()?, ty, p, button).map_err(|_| "mouse event failed")?;
+    if clicks > 0 {
+        e.set_integer_value_field(EventField::MOUSE_EVENT_CLICK_STATE, clicks);
+    }
+    e.post(CGEventTapLocation::HID);
+    std::thread::sleep(Duration::from_millis(30));
+    Ok(())
+}
+
+/// A click (or double, right click, or hover) at a screen point, only if that point belongs to the app.
+fn mouse(app: &RunningApp, x: f64, y: f64, kind: ClickKind) -> Result<(), String> {
     if ax::element_at(x, y).and_then(|e| e.pid()) != Some(app.pid) {
         return Err(format!("something else is on top of {} there; not clicking", app.name));
     }
     let p = CGPoint::new(x, y);
-    for ty in [CGEventType::LeftMouseDown, CGEventType::LeftMouseUp] {
-        let e = CGEvent::new_mouse_event(source()?, ty, p, CGMouseButton::Left).map_err(|_| "mouse event failed")?;
-        e.post(CGEventTapLocation::HID);
-        std::thread::sleep(Duration::from_millis(30));
+    match kind {
+        ClickKind::Hover => post_mouse(CGEventType::MouseMoved, p, CGMouseButton::Left, 0),
+        ClickKind::Right => {
+            post_mouse(CGEventType::RightMouseDown, p, CGMouseButton::Right, 1)?;
+            post_mouse(CGEventType::RightMouseUp, p, CGMouseButton::Right, 1)
+        }
+        ClickKind::Left | ClickKind::Double => {
+            let n = if kind == ClickKind::Double { 2 } else { 1 };
+            for clicks in 1..=n {
+                post_mouse(CGEventType::LeftMouseDown, p, CGMouseButton::Left, clicks)?;
+                post_mouse(CGEventType::LeftMouseUp, p, CGMouseButton::Left, clicks)?;
+            }
+            Ok(())
+        }
     }
-    Ok(())
+}
+
+fn mouse_drag(from: (f64, f64), to: (f64, f64)) -> Result<(), String> {
+    let at = |t: f64| CGPoint::new(from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t);
+    post_mouse(CGEventType::MouseMoved, at(0.0), CGMouseButton::Left, 0)?;
+    post_mouse(CGEventType::LeftMouseDown, at(0.0), CGMouseButton::Left, 1)?;
+    std::thread::sleep(Duration::from_millis(120));
+    const STEPS: u32 = 16;
+    for i in 1..=STEPS {
+        post_mouse(CGEventType::LeftMouseDragged, at(f64::from(i) / f64::from(STEPS)), CGMouseButton::Left, 0)?;
+    }
+    std::thread::sleep(Duration::from_millis(150));
+    post_mouse(CGEventType::LeftMouseUp, at(1.0), CGMouseButton::Left, 1)
+}
+
+/// The front app; and, only for apps the user lets the assistant see (See or Control), its window
+/// title, the page address and the selected text. Nothing from password fields or excluded apps.
+pub fn context(policy: &super::policy::Policy) -> Option<super::Context> {
+    use super::policy::{class, Access, Class};
+    let pid = front_pid()?;
+    if pid == std::process::id() as i32 {
+        return None;
+    }
+    let app = app_of_pid(pid)?;
+    let mut c = super::Context { bundle: app.bundle.clone(), app: app.name.clone(), window: None, url: None, selection: None };
+    if class(&app.bundle) == Class::Excluded || !matches!(policy.level(&app.bundle), Access::See | Access::Control) || !crate::permissions::accessibility_trusted(false) {
+        return Some(c);
+    }
+    ax::set_global_timeout(1.0);
+    c.window = window_title(pid).map(|t| one_line(&t, 160));
+    let secure = crate::permissions::secure_input_active();
+    if !secure {
+        c.selection = El::app(pid)
+            .element("AXFocusedUIElement")
+            .filter(|el| !matches!(el.attr("AXSubrole"), V::Str(s) if s == "AXSecureTextField"))
+            .and_then(|el| el.string("AXSelectedText"))
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty());
+    }
+    if super::web::is_browser(&app.bundle) {
+        match super::web::selection(&app) {
+            Some((url, text)) => {
+                c.url = Some(url).filter(|u| u.starts_with("http"));
+                if c.selection.is_none() && !secure && !text.trim().is_empty() {
+                    c.selection = Some(text.trim().to_string());
+                }
+            }
+            None => c.url = super::web::url(&app),
+        }
+    }
+    c.selection = c.selection.map(|t| t.chars().filter(|ch| !crate::sanitize::is_dangerous(*ch) || matches!(ch, '\n' | '\t')).take(4000).collect());
+    Some(c)
 }
 
 fn scroll_at(pid: i32, x: f64, y: f64, lines: i32) -> Result<(), String> {

@@ -137,6 +137,9 @@ pub struct Settings {
     pub allow_all_apps: bool,
     /// Every action on the Mac waits for the user's press.
     pub step_by_step: bool,
+    /// Send the front app, and for apps the assistant may see its window, page and selected text,
+    /// with each request ("reply to this").
+    pub share_context: bool,
 }
 
 impl Default for Settings {
@@ -174,6 +177,7 @@ impl Default for Settings {
             app_access: Default::default(),
             allow_all_apps: false,
             step_by_step: false,
+            share_context: true,
         }
     }
 }

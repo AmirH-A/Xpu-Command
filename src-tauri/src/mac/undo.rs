@@ -20,6 +20,8 @@ pub enum Step {
     ForgetFact { id: String },
     RememberFact { text: String },
     DeleteRoutine { id: String },
+    /// What was on the clipboard before (None: no text, so clear it).
+    Clipboard { text: Option<String> },
 }
 
 #[derive(Debug, Clone)]

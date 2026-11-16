@@ -28,6 +28,27 @@ pub enum MediaAction {
     Previous,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClickKind {
+    #[default]
+    Left,
+    Double,
+    Right,
+    Hover,
+}
+
+impl ClickKind {
+    fn verb(self) -> &'static str {
+        match self {
+            ClickKind::Left => "Clicking",
+            ClickKind::Double => "Double-clicking",
+            ClickKind::Right => "Right-clicking",
+            ClickKind::Hover => "Pointing at",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Player {
@@ -56,12 +77,19 @@ pub enum Call {
     ListWindows,
     ReadWindow { app: String },
     Screenshot { app: String },
-    Click { element: u32 },
+    Click { element: u32, kind: ClickKind },
     TypeText { element: u32, text: String, submit: bool },
     PressKeys { app: String, mods: Vec<&'static str>, key: String },
     ChooseMenu { app: String, path: Vec<String> },
     Scroll { app: String, down: bool, amount: u8 },
-    ClickAt { app: String, x: f64, y: f64 },
+    ClickAt { app: String, x: f64, y: f64, kind: ClickKind },
+    Drag { from: u32, to: u32 },
+    Wait { app: String, text: Option<String>, seconds: u8 },
+    ReadPage { app: String },
+    ClickPage { element: u32, kind: ClickKind },
+    FillPage { element: u32, text: String, submit: bool },
+    CopyText { text: String },
+    ReadClipboard,
     Remember { text: String },
     Forget { text: String },
     SaveRoutine { name: String, steps: Vec<crate::routines::Step> },
@@ -94,6 +122,13 @@ impl Call {
             Call::ChooseMenu { .. } => "choose_menu",
             Call::Scroll { .. } => "scroll",
             Call::ClickAt { .. } => "click_at",
+            Call::Drag { .. } => "drag",
+            Call::Wait { .. } => "wait",
+            Call::ReadPage { .. } => "read_page",
+            Call::ClickPage { .. } => "click_page",
+            Call::FillPage { .. } => "fill_page",
+            Call::CopyText { .. } => "copy_text",
+            Call::ReadClipboard => "read_clipboard",
             Call::Remember { .. } => "remember",
             Call::Forget { .. } => "forget",
             Call::SaveRoutine { .. } => "save_routine",
@@ -104,10 +139,18 @@ impl Call {
     pub fn need(&self) -> Option<super::policy::Need> {
         use super::policy::Need;
         match self {
-            Call::ReadWindow { .. } | Call::Screenshot { .. } => Some(Need::See),
-            Call::Click { .. } | Call::TypeText { .. } | Call::PressKeys { .. } | Call::ChooseMenu { .. } | Call::Scroll { .. } | Call::ClickAt { .. } => Some(Need::Control),
+            Call::ReadWindow { .. } | Call::Screenshot { .. } | Call::Wait { .. } | Call::ReadPage { .. } => Some(Need::See),
+            Call::Click { .. } | Call::TypeText { .. } | Call::PressKeys { .. } | Call::ChooseMenu { .. } | Call::Scroll { .. } | Call::ClickAt { .. } | Call::Drag { .. } | Call::ClickPage { .. } | Call::FillPage { .. } => {
+                Some(Need::Control)
+            }
             _ => None,
         }
+    }
+
+    /// Calls whose result carries content from outside (a window, a page, the clipboard): after one,
+    /// the request is "tainted" and the gate asks before acting elsewhere or sending anything out.
+    pub fn reveals(&self) -> bool {
+        matches!(self, Call::ReadWindow { .. } | Call::Screenshot { .. } | Call::ReadPage { .. } | Call::ReadClipboard)
     }
 
     pub fn flags(&self) -> super::policy::Flags {
@@ -123,8 +166,9 @@ impl Call {
 
     pub fn risk(&self) -> Risk {
         match self {
-            Call::ListApps | Call::ListShortcuts | Call::ListWindows | Call::ReadWindow { .. } | Call::Screenshot { .. } => Risk::Read,
-            Call::Click { .. } | Call::TypeText { .. } | Call::PressKeys { .. } | Call::ChooseMenu { .. } | Call::Scroll { .. } | Call::ClickAt { .. } => Risk::Safe,
+            Call::ListApps | Call::ListShortcuts | Call::ListWindows | Call::ReadWindow { .. } | Call::Screenshot { .. } | Call::Wait { .. } | Call::ReadPage { .. } | Call::ReadClipboard => Risk::Read,
+            Call::Click { .. } | Call::TypeText { .. } | Call::PressKeys { .. } | Call::ChooseMenu { .. } | Call::Scroll { .. } | Call::ClickAt { .. } | Call::Drag { .. } => Risk::Safe,
+            Call::ClickPage { .. } | Call::FillPage { .. } | Call::CopyText { .. } => Risk::Safe,
             Call::OpenApp { .. } | Call::OpenUrl { .. } | Call::WebSearch { .. } | Call::Media { .. } | Call::PlayMusic { .. } | Call::SetVolume { .. } | Call::DarkMode { .. } => Risk::Safe,
             Call::Remember { .. } | Call::Forget { .. } => Risk::Safe,
             Call::QuitApp { .. } | Call::CreateReminder { .. } | Call::CreateEvent { .. } | Call::CreateNote { .. } | Call::DraftEmail { .. } | Call::SaveRoutine { .. } => Risk::Change,
@@ -168,12 +212,20 @@ impl Call {
             Call::ListWindows => "Looking at open windows".to_string(),
             Call::ReadWindow { app } => format!("Reading {app}"),
             Call::Screenshot { app } => format!("Looking at {app}"),
-            Call::Click { element } => format!("Clicking [{element}]"),
-            Call::TypeText { element, text, submit } => format!("Typing “{}” into [{element}]{}", crate::agents::clip(text, 40), if *submit { " and pressing Return" } else { "" }),
+            Call::Click { element, kind } => format!("{} control {element}", kind.verb()),
+            Call::TypeText { element, text, submit } => format!("Typing “{}” into control {element}{}", crate::agents::clip(text, 40), if *submit { " and pressing Return" } else { "" }),
             Call::PressKeys { app, mods, key } => format!("Pressing {}{} in {app}", mods.iter().map(|m| format!("{m}+")).collect::<String>(), key),
             Call::ChooseMenu { app, path } => format!("Menu {} in {app}", path.join(" › ")),
             Call::Scroll { app, down, .. } => format!("Scrolling {} in {app}", if *down { "down" } else { "up" }),
-            Call::ClickAt { app, x, y } => format!("Clicking at ({x:.0}, {y:.0}) in {app}"),
+            Call::ClickAt { app, x, y, kind } => format!("{} ({x:.0}, {y:.0}) in {app}", kind.verb()),
+            Call::Drag { from, to } => format!("Dragging control {from} onto control {to}"),
+            Call::Wait { app, text: Some(t), .. } => format!("Waiting for “{}” in {app}", crate::agents::clip(t, 40)),
+            Call::Wait { app, seconds, .. } => format!("Waiting {seconds} s for {app}"),
+            Call::ReadPage { app } => format!("Reading the page in {app}"),
+            Call::ClickPage { element, kind } => format!("{} page item {element}", kind.verb()),
+            Call::FillPage { element, text, submit } => format!("Filling page item {element} with “{}”{}", crate::agents::clip(text, 40), if *submit { " and submitting" } else { "" }),
+            Call::CopyText { text } => format!("Copying “{}”", crate::agents::clip(text, 40)),
+            Call::ReadClipboard => "Reading the clipboard".to_string(),
             Call::Remember { text } => format!("Remembering: {text}"),
             Call::Forget { text } => format!("Forgetting “{text}”"),
             Call::SaveRoutine { name, steps } => format!("Save the routine “{name}”: {}", steps.iter().map(crate::routines::label).collect::<Vec<_>>().join(", ")),
@@ -197,6 +249,7 @@ pub fn schemas() -> Value {
     };
     let player = json!({ "type": "string", "enum": ["music", "spotify"], "description": "Optional. Default: Spotify if it is installed, else Music." });
     let local_time = "Local date and time, YYYY-MM-DDTHH:MM";
+    let kind = json!({ "type": "string", "enum": ["double", "right", "hover"], "description": "Optional. Default: a normal click." });
     json!([
         s("list_apps", "List the names of the apps installed on this Mac.", json!({}), &[]),
         s("open_app", "Open (or switch to) an installed app by name.", json!({ "name": { "type": "string", "description": "App name, e.g. \"Spotify\"" } }), &["name"]),
@@ -214,13 +267,20 @@ pub fn schemas() -> Value {
         s("create_note", "Create a note in Notes. The user sees it first and can cancel it.", json!({ "title": { "type": "string" }, "body": { "type": "string" } }), &["title", "body"]),
         s("list_windows", "List the apps that have windows open, with the access the user gave each (off, see, control, ask).", json!({}), &[]),
         s("read_window", "Read an app's front window: its text and controls, numbered like [12]. Needs see access. Use the numbers with click and type_text. Re-read after the window changes.", json!({ "app": { "type": "string" } }), &["app"]),
-        s("click", "Click a numbered control from the latest read_window. Needs control access.", json!({ "element": { "type": "integer", "minimum": 1 } }), &["element"]),
+        s("click", "Click a numbered control from the latest read_window. Needs control access. kind: double, right (opens the context menu) or hover (moves the pointer over it).", json!({ "element": { "type": "integer", "minimum": 1 }, "kind": kind }), &["element"]),
         s("type_text", "Type text into a numbered text field (focuses it first). Set submit to press Return after typing. Never used for passwords.", json!({ "element": { "type": "integer", "minimum": 1 }, "text": { "type": "string" }, "submit": { "type": "boolean" } }), &["element", "text"]),
         s("press_keys", "Press a key combination in an app, e.g. \"cmd+l\", \"escape\", \"pagedown\".", json!({ "app": { "type": "string" }, "keys": { "type": "string" } }), &["app", "keys"]),
         s("choose_menu", "Choose a menu-bar command, e.g. [\"File\", \"Export…\"].", json!({ "app": { "type": "string" }, "path": { "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": 5 } }), &["app", "path"]),
         s("scroll", "Scroll an app's front window.", json!({ "app": { "type": "string" }, "direction": { "type": "string", "enum": ["up", "down"] }, "amount": { "type": "integer", "minimum": 1, "maximum": 20 } }), &["app", "direction"]),
         s("screenshot", "Fallback when read_window shows too little: an image of the app's front window. Needs see access and Screen Recording.", json!({ "app": { "type": "string" } }), &["app"]),
-        s("click_at", "Fallback: click at x, y (pixels) in the app's latest screenshot.", json!({ "app": { "type": "string" }, "x": { "type": "number" }, "y": { "type": "number" } }), &["app", "x", "y"]),
+        s("click_at", "Fallback: click at x, y (pixels) in the app's latest screenshot.", json!({ "app": { "type": "string" }, "x": { "type": "number" }, "y": { "type": "number" }, "kind": kind }), &["app", "x", "y"]),
+        s("drag", "Drag one numbered control from read_window onto another, e.g. a file onto a folder or into another app's window (both must be visible).", json!({ "from": { "type": "integer", "minimum": 1 }, "to": { "type": "integer", "minimum": 1 } }), &["from", "to"]),
+        s("wait", "Wait until text appears in an app's window or web page (or, without text, until the page has loaded), up to seconds. Use after anything that loads before reading again.", json!({ "app": { "type": "string" }, "text": { "type": "string" }, "seconds": { "type": "integer", "minimum": 1, "maximum": 20 } }), &["app"]),
+        s("read_page", "Read the web page open in a browser (Safari, Chrome, Arc, Brave, Edge, Vivaldi): its address, text, and links, buttons and fields numbered like [12] for click_page and fill_page. Better than read_window for web pages. Read again after the page changes.", json!({ "app": { "type": "string", "description": "The browser, e.g. \"Chrome\"" } }), &["app"]),
+        s("click_page", "Click a numbered item from the latest read_page. kind: double, right or hover.", json!({ "element": { "type": "integer", "minimum": 1 }, "kind": kind }), &["element"]),
+        s("fill_page", "Fill a numbered text field, text area, editor or menu from the latest read_page (replaces what is there; for a menu, give the option's text). Set submit to submit the form. Never used for passwords or card numbers.", json!({ "element": { "type": "integer", "minimum": 1 }, "text": { "type": "string" }, "submit": { "type": "boolean" } }), &["element", "text"]),
+        s("copy_text", "Put text on the clipboard (then press_keys cmd+v in an app to paste it).", json!({ "text": { "type": "string" } }), &["text"]),
+        s("read_clipboard", "Read the text on the clipboard. Only when the user refers to what they copied.", json!({}), &[]),
         s("remember", "Save a short fact the user asked you to remember about them (a person, place, folder or preference), in their own words, e.g. \"Sara is my accountant, sara@example.com\". Only when the user asks to remember something.", json!({ "text": { "type": "string", "maxLength": 200 } }), &["text"]),
         s("forget", "Remove remembered facts that contain these words. Only when the user asks to forget something.", json!({ "text": { "type": "string" } }), &["text"]),
         s("save_routine", "Save a routine the user can run later by saying its name. Only when the user asks. Steps can only be these tools, with the same arguments as when you call them: open_app, quit_app, open_url, web_search, media, play_music, set_volume, dark_mode, run_shortcut. The user sees it first and can cancel it.", json!({ "name": { "type": "string", "description": "What the user will say, e.g. \"start my day\"" }, "steps": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "type": "object", "properties": { "tool": { "type": "string" }, "args": { "type": "object" } }, "required": ["tool", "args"] } } }), &["name", "steps"]),
@@ -309,8 +369,23 @@ struct AppArg {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ElementArg {
+struct ClickArgs {
     element: u32,
+    #[serde(default)]
+    kind: ClickKind,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DragArgs {
+    from: u32,
+    to: u32,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WaitArgs {
+    app: String,
+    text: Option<String>,
+    seconds: Option<i64>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -345,6 +420,8 @@ struct ClickAtArgs {
     app: String,
     x: f64,
     y: f64,
+    #[serde(default)]
+    kind: ClickKind,
 }
 
 /// "cmd+shift+t" → (["cmd", "shift"], "t"). Modifier aliases are normalised; the key must exist.
@@ -581,7 +658,40 @@ pub fn parse(tool: &str, v: &Value, now: NaiveDateTime) -> Result<Call, String> 
         }
         "read_window" => Call::ReadWindow { app: name("app", &args::<AppArg>(v)?.app)? },
         "screenshot" => Call::Screenshot { app: name("app", &args::<AppArg>(v)?.app)? },
-        "click" => Call::Click { element: element(args::<ElementArg>(v)?.element)? },
+        "click" => {
+            let a: ClickArgs = args(v)?;
+            Call::Click { element: element(a.element)?, kind: a.kind }
+        }
+        "click_page" => {
+            let a: ClickArgs = args(v)?;
+            Call::ClickPage { element: element(a.element)?, kind: a.kind }
+        }
+        "fill_page" => {
+            let a: TypeArgs = args(v)?;
+            Call::FillPage { element: element(a.element)?, text: text("text", &a.text, 8000, true)?, submit: a.submit }
+        }
+        "read_page" => Call::ReadPage { app: name("app", &args::<AppArg>(v)?.app)? },
+        "drag" => {
+            let a: DragArgs = args(v)?;
+            if a.from == a.to {
+                return Err("from and to must be different controls".into());
+            }
+            Call::Drag { from: element(a.from)?, to: element(a.to)? }
+        }
+        "wait" => {
+            let a: WaitArgs = args(v)?;
+            let text = opt_text("text", a.text, 100, false)?;
+            let seconds = a.seconds.unwrap_or(if text.is_some() { 8 } else { 2 });
+            if !(1..=20).contains(&seconds) {
+                return Err("seconds must be 1-20".into());
+            }
+            Call::Wait { app: name("app", &a.app)?, text, seconds: seconds as u8 }
+        }
+        "copy_text" => Call::CopyText { text: text("text", &args::<Text>(v)?.text, 8000, true)? },
+        "read_clipboard" => {
+            args::<Empty>(v)?;
+            Call::ReadClipboard
+        }
         "type_text" => {
             let a: TypeArgs = args(v)?;
             Call::TypeText { element: element(a.element)?, text: text("text", &a.text, 4000, true)?, submit: a.submit }
@@ -616,7 +726,7 @@ pub fn parse(tool: &str, v: &Value, now: NaiveDateTime) -> Result<Call, String> 
             if !(a.x.is_finite() && a.y.is_finite() && a.x >= 0.0 && a.y >= 0.0 && a.x < 20000.0 && a.y < 20000.0) {
                 return Err("x and y must be pixel positions in the screenshot".into());
             }
-            Call::ClickAt { app: name("app", &a.app)?, x: a.x, y: a.y }
+            Call::ClickAt { app: name("app", &a.app)?, x: a.x, y: a.y, kind: a.kind }
         }
         other => return Err(format!("unknown tool {:?}", crate::agents::clip(other, 40))),
     })
@@ -637,10 +747,11 @@ mod tests {
     fn every_schema_parses_and_names_match() {
         let list = schemas();
         let names: Vec<&str> = list.as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names.len(), 27);
+        assert_eq!(names.len(), 34);
         for n in &names {
             let e = p(n, json!({ "zzz": 1 })).unwrap_err();
             assert!(e.contains("invalid arguments") || e.contains("give a level"), "{n}: {e}");
+            assert!(list.as_array().unwrap().iter().any(|t| t["name"] == *n && t["inputSchema"]["additionalProperties"] == false));
         }
         assert!(p("rm_rf", json!({})).unwrap_err().contains("unknown tool"));
     }
@@ -727,6 +838,35 @@ mod tests {
         assert!(p("scroll", json!({"app":"Chrome","direction":"sideways"})).is_err());
         assert!(p("click_at", json!({"app":"Chrome","x":-1,"y":5})).is_err());
         assert!(p("open_url", json!({"url":"https://a.com"})).unwrap().flags().outbound);
+    }
+
+    #[test]
+    fn mouse_pages_waits_and_the_clipboard() {
+        assert_eq!(p("click", json!({"element":4})).unwrap(), Call::Click { element: 4, kind: ClickKind::Left });
+        assert_eq!(p("click", json!({"element":4,"kind":"right"})).unwrap().describe(), "Right-clicking control 4");
+        assert!(p("click", json!({"element":4,"kind":"triple"})).is_err());
+        assert_eq!(p("click_at", json!({"app":"Finder","x":5,"y":6,"kind":"double"})).unwrap().describe(), "Double-clicking (5, 6) in Finder");
+        assert!(p("drag", json!({"from":3,"to":3})).is_err());
+        assert_eq!(p("drag", json!({"from":3,"to":9})).unwrap().need(), Some(crate::mac::policy::Need::Control));
+
+        let w = p("wait", json!({"app":"Chrome","text":"Inbox"})).unwrap();
+        assert_eq!(w, Call::Wait { app: "Chrome".into(), text: Some("Inbox".into()), seconds: 8 });
+        assert_eq!((w.risk(), w.need(), w.reveals()), (Risk::Read, Some(crate::mac::policy::Need::See), false), "waiting reveals nothing");
+        assert!(matches!(p("wait", json!({"app":"Chrome"})).unwrap(), Call::Wait { seconds: 2, text: None, .. }));
+        assert!(p("wait", json!({"app":"Chrome","seconds":60})).is_err());
+
+        let r = p("read_page", json!({"app":"Safari"})).unwrap();
+        assert!(r.reveals() && r.risk() == Risk::Read);
+        let f = p("fill_page", json!({"element":2,"text":"hello","submit":true})).unwrap();
+        assert_eq!((f.risk(), f.need()), (Risk::Safe, Some(crate::mac::policy::Need::Control)));
+        assert_eq!(f.describe(), "Filling page item 2 with “hello” and submitting");
+        assert!(p("fill_page", json!({"element":2,"text":""})).is_err());
+        assert!(p("click_page", json!({"element":0})).is_err());
+
+        assert_eq!(p("copy_text", json!({"text":"a\nb"})).unwrap(), Call::CopyText { text: "a\nb".into() });
+        assert!(p("copy_text", json!({"text":"x\u{0007}"})).is_err());
+        let c = p("read_clipboard", json!({})).unwrap();
+        assert!(c.reveals() && c.need().is_none());
     }
 
     #[test]
