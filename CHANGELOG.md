@@ -2,6 +2,11 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
+## 0.6.1 (2026-11-16)
+
+### Added
+- **Instant commands.** Simple one-step requests run at once without the AI, through the same App access and cancel checks: open or quit an app, open a website, set or mute the volume, pause, play or skip music, dark mode, and web search, in English or Persian («اسپاتیفای رو باز کن»، «صدا رو بذار روی ۳۰»). "Open Calculator" now takes about 0.15 s instead of 4 s. Longer requests and names it doesn't recognize still go to Claude. Turn it off in Mode › Instant commands.
+
 ## 0.6.0 (2026-11-16)
 
 ### Added
