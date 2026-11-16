@@ -93,6 +93,23 @@ pub fn maybe_run() -> bool {
             true
         }
         #[cfg(target_os = "macos")]
+        Some("--selftest-instant") => {
+            let text = args[2..].join(" ");
+            let started = std::time::Instant::now();
+            let Some(steps) = crate::mac::quick::parse(&text) else {
+                println!("not an instant command: goes to the AI");
+                return true;
+            };
+            let exec = std::sync::Arc::new(crate::mac::exec::MacExec::new(Default::default(), crate::mac::workspace().unwrap()).without_learning());
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let (done, stopped) = rt.block_on(crate::mac::server::run_steps(std::sync::Arc::new(ConsoleHost), exec, Default::default(), Default::default(), &steps));
+            println!("INSTANT {steps:?} done={done:?} stopped={stopped:?} in {} ms", started.elapsed().as_millis());
+            if std::env::var("XPU_UNDO").is_ok_and(|v| v == "1") {
+                println!("UNDO {}", crate::mac::exec::undo_last());
+            }
+            true
+        }
+        #[cfg(target_os = "macos")]
         Some("--selftest-routine") => {
             let spoken = args[2..].join(" ");
             let Some(r) = crate::routines::match_spoken(&spoken, &crate::routines::list()).cloned() else {

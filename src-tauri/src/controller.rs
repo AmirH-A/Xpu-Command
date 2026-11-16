@@ -641,7 +641,12 @@ impl Controller {
                 self.hide_later(app, Duration::from_millis(700));
             }
             Delivery::Agent => self.run_agent(app, &s, &text).await?,
-            Delivery::ControlMac => self.run_mac(app, &s, &text).await?,
+            Delivery::ControlMac => {
+                if s.instant && self.try_instant(app, &s, &text).await {
+                    return Ok(());
+                }
+                self.run_mac(app, &s, &text).await?
+            }
         }
         Ok(())
     }
@@ -767,6 +772,53 @@ impl Controller {
         }
         self.hide_later(app, Duration::from_secs(3));
         Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    async fn try_instant(self: &Arc<Self>, app: &AppHandle, s: &Settings, text: &str) -> bool {
+        let Some(steps) = crate::mac::quick::parse(text) else { return false };
+        if self.agent_cancel.lock().is_some() {
+            return false;
+        }
+        let names_ok = {
+            let installed = crate::mac::apps::installed();
+            steps.iter().all(|(tool, args)| match tool.as_str() {
+                "open_app" | "quit_app" => args["name"].as_str().is_some_and(|n| crate::mac::apps::find(&installed, n).is_ok()),
+                _ => true,
+            })
+        };
+        if !names_ok {
+            return false;
+        }
+        let started = Instant::now();
+        let Ok(workspace) = crate::mac::workspace() else { return false };
+        let host = Arc::new(MacHost { ctl: self.clone(), app: app.clone(), speak: s.speak_summary });
+        let policy = s.mac_policy();
+        let exec = Arc::new(crate::mac::exec::MacExec::new(policy.clone(), workspace).with_memory(s.memory));
+        let (done, stopped) = crate::mac::server::run_steps(host, exec, policy, Default::default(), &steps).await;
+        crate::frame::hide(app);
+        match (stopped, done.first()) {
+            (None, Some(said)) => {
+                log::info!("instant command in {} ms", started.elapsed().as_millis());
+                self.overlay(app, Phase::Done, said, Some("Mac"));
+                if s.speak_summary {
+                    speech::speak(said.clone());
+                }
+                self.hide_later(app, Duration::from_millis(2200));
+                true
+            }
+            (Some(why), _) if why.contains("cancelled") || why.contains("did not") => {
+                self.overlay(app, Phase::Done, "Cancelled", Some("Mac"));
+                self.hide_later(app, Duration::from_millis(1500));
+                true
+            }
+            _ => false,
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    async fn try_instant(self: &Arc<Self>, _app: &AppHandle, _s: &Settings, _text: &str) -> bool {
+        false
     }
 
     #[cfg(not(target_os = "macos"))]

@@ -93,6 +93,7 @@ pub struct Settings {
     /// Soft sounds when listening starts, is sent, or is cancelled.
     pub sound_cues: bool,
     pub live_words: bool,
+    pub instant: bool,
     /// Press AirPods (or any headset play button) to talk.
     #[serde(alias = "airpods_press", deserialize_with = "airpods_on")]
     pub airpods: bool,
@@ -137,6 +138,7 @@ impl Default for Settings {
             auto_stop: true,
             sound_cues: true,
             live_words: true,
+            instant: true,
             airpods: false,
             conversation: true,
             memory: true,

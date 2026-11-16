@@ -67,6 +67,7 @@ mouse button (held) ─► microphone ─► speech-to-text ─► ┬─ Mode A
   - Say **"stop"** to stop the agent, or **"new task"** to start fresh.
   - **Several Claude accounts?** Pick the profile (`~/.claude`, `~/.claude-work`, …) in Settings; it's passed as `CLAUDE_CONFIG_DIR`.
 - **Mode C, "control my Mac"** (macOS): *"open Spotify"*, *"volume 30"*, *"remind me to call the accountant tomorrow at 10"*, *"draft an email to sara@example.com saying I'll be late"*.
+  - **Instant commands:** simple one-step requests ("open Spotify", "volume 30", "next song", "dark mode on", «اسپاتیفای رو باز کن», «صدا رو بذار روی ۳۰») run at once, about 0.15 s instead of 4 s, without the AI and through the same checks. Anything longer, or a name it doesn't recognize, goes to Claude. Turn it off in Mode › Instant commands.
   - Claude Code plans with **only the app's own 27 tools** (no shell, no files, no web); the app checks every call, then runs, shows-then-runs, or asks first, by risk.
   - Reminders, events, notes, drafts and quitting apps: shown first, **press or knock within 3 s to cancel**. Shortcuts: **press or knock to allow**. Nothing is ever sent, deleted or bought.
   - **Works inside apps you allow** (Settings › App access: Off / See / Control / Ask each time; Off by default). It reads windows through macOS Accessibility (real buttons and fields, numbered), clicks, types, uses menus and keys; screenshots are a fallback. A glowing outline marks the window it is working on.

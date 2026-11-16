@@ -7,6 +7,7 @@ pub mod ax;
 #[cfg(target_os = "macos")]
 pub mod exec;
 pub mod policy;
+pub mod quick;
 pub mod server;
 pub mod tools;
 pub mod undo;
