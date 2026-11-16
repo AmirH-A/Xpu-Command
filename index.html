@@ -247,6 +247,20 @@ footer a:hover { color: var(--fg); }
   .specs th { width: 40%; }
   .mode { padding: 22px 20px; }
 }
+.head .lead { margin: 0; color: var(--muted); font-size: var(--step-0, 1.05rem); max-width: 38em; }
+.road { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.lane { display: grid; align-content: start; gap: 14px; padding: 24px 24px 26px; border-radius: var(--radius); background: var(--bg-2); border: 1px solid var(--line); }
+.lane.now { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 34%, transparent); }
+.lane h3 { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0; }
+.lane h3 small { font: 500 .72rem/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.lane.now h3 small { color: var(--accent-fg); }
+.lane ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.lane li { display: grid; gap: 4px; padding-top: 14px; border-top: 1px solid var(--line); }
+.lane li b { font-weight: 650; }
+.lane li span { color: var(--muted); font-size: .93rem; }
+.lane .tag { justify-self: start; font: 500 .7rem/1 var(--font-mono); padding: 5px 7px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); color: var(--accent-fg); }
+.road-note { margin: 22px 0 0; color: var(--faint); font-size: .92rem; }
+@media (max-width: 900px) { .road { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
   html { scroll-behavior: auto; }
@@ -392,6 +406,7 @@ img { max-width: 100%; }
       <a href="#ways">How you talk</a>
       <a href="#modes">What it does</a>
       <a href="#trust">Privacy</a>
+      <a href="#roadmap">Roadmap</a>
       <a href="#install">Install</a>
     </nav>
     <a class="btn small primary" href="https://github.com/XPU-LAB/xpu-command/releases/latest">Download</a>
@@ -489,7 +504,7 @@ img { max-width: 100%; }
         </div></div>
       </div>
       <div class="panel" role="tabpanel" id="panel-mac" aria-labelledby="tab-mac" hidden>
-        <div><h3>Control your Mac</h3><p class="what">Open apps, play music, set reminders and events, draft emails, and work inside the apps you allow. Anything that changes your data waits 3 seconds so you can cancel.</p></div>
+        <div><h3>Control your Mac</h3><p class="what">Open apps, play music, set reminders and events, draft emails, and work inside the apps and web pages you allow: click, fill in, right-click, drag and copy. Anything that changes your data waits 3 seconds so you can cancel.</p></div>
         <div class="term"><div class="transcript">
           <div><b>you</b><span class="you">“Remind me to call Sara tomorrow at 10.”</span></div>
           <div><b>about to</b><span class="ask">Reminder: Call Sara · Tue 17 Nov 10:00</span></div>
@@ -552,6 +567,48 @@ img { max-width: 100%; }
         </div>
         <p class="words" lang="fa">آره · نه · همیشه</p>
       </div>
+    </div>
+  </section>
+
+  <section id="roadmap">
+    <div class="wrap">
+      <div class="head">
+        <p class="eyebrow">Roadmap</p>
+        <h2>Where Xpu Command is going.</h2>
+        <p class="lead">From a voice button to the way you get things done on your Mac: safely, out loud, and on your terms.</p>
+      </div>
+      <div class="road">
+        <div class="lane now">
+          <h3>Now <small>Built</small></h3>
+          <ul>
+            <li><b>Works inside web pages</b><span>Reads the page, clicks, fills in and submits forms in Safari and Chrome-based browsers.</span><span class="tag">0.8</span></li>
+            <li><b>Understands “this”</b><span>What you selected and the page you're on come along with your request.</span><span class="tag">0.8</span></li>
+            <li><b>Right-click, drag, copy and wait</b><span>Uses the mouse and clipboard like you do, and waits for pages to load.</span><span class="tag">0.8</span></li>
+            <li><b>Your files</b><span>Find, read, open, move, rename and trash files in your home folder, all undoable.</span><span class="tag">Next update</span></li>
+          </ul>
+        </div>
+        <div class="lane">
+          <h3>Next <small>Planned</small></h3>
+          <ul>
+            <li><b>Signed by Apple, updates itself</b><span>No security warning on install, and Accessibility stays allowed after every update.</span></li>
+            <li><b>Polished dictation</b><span>Drops the “um”s, fixes punctuation, fits the app you're in. Say “make that shorter”.</span></li>
+            <li><b>Shows its plan and checks its work</b><span>Each step appears in the pill; when something fails, it tries another way.</span></li>
+            <li><b>“Hey Xpu”</b><span>A wake phrase that runs on your Mac, so you don't need a button.</span></li>
+            <li><b>Offline Persian voice</b><span>Spoken answers in Persian, and every message in your language.</span></li>
+          </ul>
+        </div>
+        <div class="lane">
+          <h3>Later <small>Exploring</small></h3>
+          <ul>
+            <li><b>Your Mac as a tool for any agent</b><span>Claude Code, Cursor and Codex use the same safe, gated Mac actions.</span></li>
+            <li><b>Choose your model</b><span>Local models (Ollama, Apple on-device) or the cloud, with a fully offline mode.</span></li>
+            <li><b>Teach it by doing</b><span>Show it once and it saves the routine; run routines on a schedule.</span></li>
+            <li><b>Meeting notes</b><span>Live notes, with action items sent to Reminders.</span></li>
+            <li><b>iPhone, Watch and Windows</b><span>Talk to your Mac from your wrist, and Xpu Command beyond the Mac.</span></li>
+          </ul>
+        </div>
+      </div>
+      <p class="road-note">Plans, not promises: the order follows what people ask for most. <a href="https://github.com/XPU-LAB/xpu-command/issues">Suggest something on GitHub</a>.</p>
     </div>
   </section>
 
