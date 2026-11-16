@@ -2,6 +2,17 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
+## 0.6.0 (2026-11-16)
+
+### Added
+- **Your words appear while you talk.** The pill shows what you're saying as you say it, transcribed on your Mac about once a second. The final text still comes from the whole recording. Turn it off in Talk › More options.
+- **The menu-bar icon turns amber** while it's listening or waiting for your answer.
+
+### Changed
+- **New look (Signal).** Xpu violet stays the brand color; amber now means "your turn": listening, Allow? questions and downloads. Green means done.
+- **New fonts**, bundled in the app: Sora for headings, Manrope for text, JetBrains Mono for paths and times.
+- **The pill** glows amber with an amber waveform while listening, spins violet while working, and turns green when done.
+
 ## 0.5.2 (2026-11-15)
 
 ### Changed
