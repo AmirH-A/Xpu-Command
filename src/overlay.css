@@ -25,6 +25,8 @@ html, body { margin: 0; background: transparent; overflow: hidden; font: 500 14p
 .text { font-size: 15px; font-weight: 500; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; }
 .text.long { font-size: 13.5px; line-height: 1.3; -webkit-line-clamp: 3; }
 .pill[data-phase="confirm"] .text { -webkit-line-clamp: 3; }
+.text.live::after { content: ""; display: inline-block; width: 2px; height: 1em; margin-left: 3px; vertical-align: -2px; background: var(--amber); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
 .bars { display: flex; gap: 3px; height: 18px; align-items: center; }
 .bars i { display: block; width: 4px; border-radius: 2px; background: var(--amber); height: 3px; transition: height .08s linear; }
 .pill:not([data-phase="listening"]) .bars { display: none; }

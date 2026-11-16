@@ -34,6 +34,8 @@ pub fn input_devices() -> Vec<String> {
 pub struct Recording {
     stop: Arc<AtomicBool>,
     thread: Option<std::thread::JoinHandle<Result<Captured>>>,
+    buf: Arc<Mutex<Vec<f32>>>,
+    rate: Arc<std::sync::atomic::AtomicU32>,
 }
 
 impl Recording {
@@ -43,6 +45,9 @@ impl Recording {
         let wanted = device.map(str::to_string);
         let stop = Arc::new(AtomicBool::new(false));
         let stop2 = stop.clone();
+        let shared = Arc::new(Mutex::new(Vec::<f32>::new()));
+        let rate_shared = Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let (buf, rate_out) = (shared.clone(), rate_shared.clone());
         let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<()>>();
         let thread = std::thread::Builder::new().name("xpu-audio".into()).spawn(move || -> Result<Captured> {
             let host = cpal::default_host();
@@ -62,7 +67,8 @@ impl Recording {
             let rate = config.sample_rate().0;
             let channels = config.channels() as usize;
             let max_samples = (rate as usize) * (max_seconds as usize);
-            let buf = Arc::new(Mutex::new(Vec::<f32>::with_capacity(rate as usize * 10)));
+            buf.lock().reserve(rate as usize * 10);
+            rate_out.store(rate, Ordering::Relaxed);
             let level = Arc::new(level);
             let (b2, l2) = (buf.clone(), level.clone());
             let mut since_level = 0usize;
@@ -114,10 +120,26 @@ impl Recording {
             Ok(Captured(out))
         })?;
         match ready_rx.recv() {
-            Ok(Ok(())) => Ok(Recording { stop, thread: Some(thread) }),
+            Ok(Ok(())) => Ok(Recording { stop, thread: Some(thread), buf: shared, rate: rate_shared }),
             Ok(Err(e)) => Err(e),
             Err(_) => Err(thread.join().ok().and_then(|r| r.err()).unwrap_or_else(|| msg("microphone failed to start"))),
         }
+    }
+
+    pub fn snapshot(&self, max_seconds: f32) -> Option<Captured> {
+        let rate = self.rate.load(Ordering::Relaxed);
+        if rate == 0 {
+            return None;
+        }
+        let tail: Vec<f32> = {
+            let b = self.buf.lock();
+            let keep = (rate as f32 * max_seconds) as usize;
+            b[b.len().saturating_sub(keep)..].to_vec()
+        };
+        let mut tail = tail;
+        let out = resample(&tail, rate, TARGET_RATE);
+        tail.zeroize();
+        Some(Captured(out))
     }
 
     pub fn finish(mut self) -> Result<Captured> {

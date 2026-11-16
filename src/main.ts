@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 type Settings = {
-  button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; airpods: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
+  button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; live_words: boolean; airpods: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
   delivery: 'type_into_focused' | 'agent' | 'control_mac'; agent: 'claude' | 'codex' | 'custom'; custom_agent: string | null; project_dir: string | null; safety: 'read_only' | 'edit' | 'ask_commands'; conversation: boolean; memory: boolean;
   speak_summary: boolean; auto_submit: boolean; max_record_seconds: number; input_device: string | null; claude_profile: string | null; mac_model: 'haiku' | 'sonnet'; app_access: Record<string, Access>; allow_all_apps: boolean; step_by_step: boolean;
 };
@@ -31,7 +31,7 @@ type Access = 'off' | 'see' | 'control' | 'ask';
 type AppRow = { bundle: string; name: string; class: 'normal' | 'terminal' | 'excluded' };
 let appRows: AppRow[] = [];
 
-function bindCheck(key: 'auto_submit' | 'speak_summary' | 'knock' | 'allow_all_apps' | 'step_by_step' | 'auto_stop' | 'sound_cues' | 'conversation' | 'memory') {
+function bindCheck(key: 'auto_submit' | 'speak_summary' | 'knock' | 'allow_all_apps' | 'step_by_step' | 'auto_stop' | 'sound_cues' | 'conversation' | 'memory' | 'live_words') {
   const el = $<HTMLInputElement>(key);
   el.checked = s[key];
   el.onchange = () => { s[key] = el.checked; render(); };
@@ -482,6 +482,7 @@ async function init() {
   bindCheck('knock');
   bindCheck('auto_stop');
   bindCheck('sound_cues');
+  bindCheck('live_words');
   bindCheck('conversation');
   bindCheck('memory');
   bindCheck('allow_all_apps');

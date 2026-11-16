@@ -10,6 +10,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition};
 
+const LIVE_EVERY: Duration = Duration::from_millis(900);
+const LIVE_WINDOW_SECONDS: f32 = 15.0;
 const MIN_HOLD: Duration = Duration::from_millis(250);
 /// A double knock that ends a recording is itself recorded: its span plus this margin (microphone
 /// latency, the last tap's ring) is dropped from the end.
@@ -299,6 +301,7 @@ pub struct Controller {
     /// While a Mac action is shown for cancel or approval: the next press answers it.
     pending: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
     generation: std::sync::atomic::AtomicU64,
+    tray_live: std::sync::atomic::AtomicBool,
 }
 
 impl Controller {
@@ -314,6 +317,7 @@ impl Controller {
             session: Mutex::new(None),
             pending: Mutex::new(None),
             generation: Default::default(),
+            tray_live: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -416,6 +420,7 @@ impl Controller {
         match Recording::start(device.as_deref(), max, level) {
             Ok(r) => {
                 *self.recording.lock() = Some(Rec { rec: r, started: Instant::now(), id, trigger, vad });
+                self.live_words(app, id);
                 if cues {
                     crate::cues::play(crate::cues::Cue::Start);
                 }
@@ -432,6 +437,61 @@ impl Controller {
                 self.overlay(app, Phase::Listening, hint, None);
             }
             Err(e) => self.fail(app, e),
+        }
+    }
+
+    fn live_words(self: &Arc<Self>, app: &AppHandle, id: u64) {
+        let (model, language) = {
+            let s = self.settings.read();
+            if !s.live_words || s.stt != SttEngine::Local || (s.local_model.ends_with(".en") && !matches!(s.language.as_str(), "en" | "auto")) {
+                return;
+            }
+            (s.local_model.clone(), s.language.clone())
+        };
+        let (this, app) = (self.clone(), app.clone());
+        tauri::async_runtime::spawn(async move {
+            let mut shown = String::new();
+            loop {
+                tokio::time::sleep(LIVE_EVERY).await;
+                let snap = {
+                    let rec = this.recording.lock();
+                    let Some(r) = rec.as_ref().filter(|r| r.id == id) else { break };
+                    let voiced = r.vad.lock().voiced_ms();
+                    if voiced < 300 {
+                        continue;
+                    }
+                    match r.rec.snapshot(LIVE_WINDOW_SECONDS) {
+                        Some(a) => (a, voiced),
+                        None => continue,
+                    }
+                };
+                let (audio, voiced) = snap;
+                let (engine, model, lang) = (this.engine.clone(), model.clone(), language.clone());
+                let heard = tauri::async_runtime::spawn_blocking(move || engine.transcribe(&model, &stt::Request { audio: &audio, language: &lang, vocabulary: "" })).await;
+                let text = match heard {
+                    Ok(Ok(t)) => sanitize::clean_transcript(&t),
+                    _ => break,
+                };
+                let current = this.recording.lock().as_ref().is_some_and(|r| r.id == id);
+                if !current {
+                    break;
+                }
+                if !text.is_empty() && !crate::vad::is_phantom(&text, voiced) && text != shown {
+                    this.overlay(&app, Phase::Listening, &text, None);
+                    shown = text;
+                }
+            }
+        });
+    }
+
+    fn set_tray_live(&self, app: &AppHandle, on: bool) {
+        if self.tray_live.swap(on, std::sync::atomic::Ordering::Relaxed) == on {
+            return;
+        }
+        let Some(tray) = app.tray_by_id("tray") else { return };
+        let icon = if on { tauri::image::Image::from_bytes(include_bytes!("../icons/tray-live.png")).ok() } else { app.default_window_icon().cloned() };
+        if let Err(e) = tray.set_icon(icon) {
+            log::warn!("tray icon: {e}");
         }
     }
 
@@ -849,6 +909,7 @@ impl Controller {
 
     pub fn overlay(&self, app: &AppHandle, phase: Phase, text: &str, agent: Option<&str>) {
         self.generation.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.set_tray_live(app, matches!(phase, Phase::Listening | Phase::Confirm | Phase::Pending));
         let Some(w) = app.get_webview_window("overlay") else { return };
         if matches!(phase, Phase::Hidden) {
             let _ = w.hide();

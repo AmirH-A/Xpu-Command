@@ -38,6 +38,7 @@ void listen<OverlayState>('overlay', ({ payload }) => {
   const shown = fit(payload.phase, payload.text);
   text.textContent = shown;
   text.classList.toggle('long', shown.length > 80);
+  text.classList.toggle('live', payload.phase === 'listening' && !payload.text.startsWith('Listening'));
   text.title = payload.text;
   agent.textContent = payload.agent ?? '';
   if (payload.phase === 'listening') levels.fill(0);
