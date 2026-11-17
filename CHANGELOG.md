@@ -2,6 +2,13 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
+## Unreleased
+
+### Changed
+- **Asks far less.** Naming an app in your request ("reply in Slack", "open Notes and…") allows it for that request without a question; so does "this" or "here" for the app in front, and mentioning a file or folder for Your files. Terminals, password managers and system settings are never allowed this way.
+- **"Always".** When the assistant asks for an app, say "always" and it is saved in Settings › Apps, so it doesn't ask again; "yes" or a press allows it for this request, "no" declines.
+- After you say yes to acting in an app, the assistant doesn't ask again for that app in the same request. Sending, paying, deleting and sending anything out after reading still need your yes.
+
 ## 0.9.0 (2026-11-17)
 
 ### Added

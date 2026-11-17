@@ -2,6 +2,7 @@
 //! Claude Code plans (no built-in tools, only ours); the app validates, gates by risk, runs and
 //! logs every action.
 pub mod apps;
+pub mod consent;
 #[cfg(target_os = "macos")]
 pub mod ax;
 #[cfg(target_os = "macos")]

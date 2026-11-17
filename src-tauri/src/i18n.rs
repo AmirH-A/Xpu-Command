@@ -162,6 +162,9 @@ const FA: Table = &[
     ("{count} items", "{count} مورد"), ("Remembering: {text}", "به خاطر سپردن: {text}"), ("Forgetting “{text}”", "فراموش کردن «{text}»"), ("Save the routine “{name}”: {steps}", "ذخیرهٔ روتین «{name}»: {steps}"),
     ("Typing “{text}” into {label} in {app}", "تایپ «{text}» در {label} در {app}"), ("Typing “{text}” into {label} in {app}, then Return", "تایپ «{text}» در {label} در {app} و بعد Return"),
     ("Filling {label} in {app} with “{text}”", "پر کردن {label} در {app} با «{text}»"), ("Filling {label} in {app} with “{text}”, then submitting", "پر کردن {label} در {app} با «{text}» و بعد ارسال"), ("Dragging {label} in {app}", "کشیدن {label} در {app}"),
+    ("Say “always” to stop asking, “yes” for now, or press", "بگویید «همیشه» تا دیگر نپرسم، «بله» برای همین بار، یا فشار دهید"),
+    ("{question}? Say always, yes, or no.", "{question}؟ بگویید همیشه، بله یا نه."),
+    ("{app} is allowed from now on. Change it in Settings › Apps.", "از این به بعد {app} مجاز است. در تنظیمات › برنامه‌ها عوضش کنید."),
 ];
 
 const ES: Table = &[
@@ -231,6 +234,9 @@ const ES: Table = &[
     ("{count} items", "{count} elementos"), ("Remembering: {text}", "Recordando: {text}"), ("Forgetting “{text}”", "Olvidando «{text}»"), ("Save the routine “{name}”: {steps}", "Guardar la rutina «{name}»: {steps}"),
     ("Typing “{text}” into {label} in {app}", "Escribiendo «{text}» en {label} de {app}"), ("Typing “{text}” into {label} in {app}, then Return", "Escribiendo «{text}» en {label} de {app} y luego Intro"),
     ("Filling {label} in {app} with “{text}”", "Rellenando {label} de {app} con «{text}»"), ("Filling {label} in {app} with “{text}”, then submitting", "Rellenando {label} de {app} con «{text}» y enviando"), ("Dragging {label} in {app}", "Arrastrando {label} en {app}"),
+    ("Say “always” to stop asking, “yes” for now, or press", "Di «siempre» para no volver a preguntar, «sí» para esta vez, o pulsa"),
+    ("{question}? Say always, yes, or no.", "¿{question}? Di siempre, sí o no."),
+    ("{app} is allowed from now on. Change it in Settings › Apps.", "{app} queda permitido a partir de ahora. Cámbialo en Ajustes › Apps."),
 ];
 
 const DE: Table = &[
@@ -300,6 +306,9 @@ const DE: Table = &[
     ("{count} items", "{count} Objekte"), ("Remembering: {text}", "Merkt sich: {text}"), ("Forgetting “{text}”", "Vergisst „{text}“"), ("Save the routine “{name}”: {steps}", "Routine „{name}“ speichern: {steps}"),
     ("Typing “{text}” into {label} in {app}", "Tippt „{text}“ in {label} in {app}"), ("Typing “{text}” into {label} in {app}, then Return", "Tippt „{text}“ in {label} in {app}, dann Return"),
     ("Filling {label} in {app} with “{text}”", "Füllt {label} in {app} mit „{text}“"), ("Filling {label} in {app} with “{text}”, then submitting", "Füllt {label} in {app} mit „{text}“, dann senden"), ("Dragging {label} in {app}", "Zieht {label} in {app}"),
+    ("Say “always” to stop asking, “yes” for now, or press", "Sag „immer“, damit ich nicht mehr frage, „ja“ für dieses Mal, oder drück"),
+    ("{question}? Say always, yes, or no.", "{question}? Sag immer, ja oder nein."),
+    ("{app} is allowed from now on. Change it in Settings › Apps.", "{app} ist ab jetzt erlaubt. Ändern unter Einstellungen › Apps."),
 ];
 
 const FR: Table = &[
@@ -369,6 +378,9 @@ const FR: Table = &[
     ("{count} items", "{count} éléments"), ("Remembering: {text}", "Je retiens : {text}"), ("Forgetting “{text}”", "J’oublie « {text} »"), ("Save the routine “{name}”: {steps}", "Enregistrer la routine « {name} » : {steps}"),
     ("Typing “{text}” into {label} in {app}", "Saisie de « {text} » dans {label} de {app}"), ("Typing “{text}” into {label} in {app}, then Return", "Saisie de « {text} » dans {label} de {app}, puis Entrée"),
     ("Filling {label} in {app} with “{text}”", "Remplissage de {label} dans {app} avec « {text} »"), ("Filling {label} in {app} with “{text}”, then submitting", "Remplissage de {label} dans {app} avec « {text} », puis envoi"), ("Dragging {label} in {app}", "Glisser {label} dans {app}"),
+    ("Say “always” to stop asking, “yes” for now, or press", "Dites « toujours » pour ne plus demander, « oui » pour cette fois, ou appuyez"),
+    ("{question}? Say always, yes, or no.", "{question} ? Dites toujours, oui ou non."),
+    ("{app} is allowed from now on. Change it in Settings › Apps.", "{app} est autorisé désormais. Modifiez-le dans Réglages › Apps."),
 ];
 
 const AR: Table = &[
@@ -438,6 +450,9 @@ const AR: Table = &[
     ("{count} items", "{count} عناصر"), ("Remembering: {text}", "أتذكّر: {text}"), ("Forgetting “{text}”", "أنسى «{text}»"), ("Save the routine “{name}”: {steps}", "حفظ الروتين «{name}»: {steps}"),
     ("Typing “{text}” into {label} in {app}", "كتابة «{text}» في {label} في {app}"), ("Typing “{text}” into {label} in {app}, then Return", "كتابة «{text}» في {label} في {app} ثم Return"),
     ("Filling {label} in {app} with “{text}”", "ملء {label} في {app} بـ «{text}»"), ("Filling {label} in {app} with “{text}”, then submitting", "ملء {label} في {app} بـ «{text}» ثم الإرسال"), ("Dragging {label} in {app}", "سحب {label} في {app}"),
+    ("Say “always” to stop asking, “yes” for now, or press", "قل «دائمًا» حتى لا أسأل مجددًا، «نعم» لهذه المرة، أو اضغط"),
+    ("{question}? Say always, yes, or no.", "{question}؟ قل دائمًا أو نعم أو لا."),
+    ("{app} is allowed from now on. Change it in Settings › Apps.", "{app} مسموح من الآن. غيّر ذلك في الإعدادات › التطبيقات."),
 ];
 
 const ZH: Table = &[
@@ -507,6 +522,9 @@ const ZH: Table = &[
     ("{count} items", "{count} 个项目"), ("Remembering: {text}", "记住：{text}"), ("Forgetting “{text}”", "忘记“{text}”"), ("Save the routine “{name}”: {steps}", "保存例程“{name}”：{steps}"),
     ("Typing “{text}” into {label} in {app}", "在 {app} 的{label}中输入“{text}”"), ("Typing “{text}” into {label} in {app}, then Return", "在 {app} 的{label}中输入“{text}”，然后回车"),
     ("Filling {label} in {app} with “{text}”", "在 {app} 的{label}中填入“{text}”"), ("Filling {label} in {app} with “{text}”, then submitting", "在 {app} 的{label}中填入“{text}”，然后提交"), ("Dragging {label} in {app}", "在 {app} 中拖动{label}"),
+    ("Say “always” to stop asking, “yes” for now, or press", "说“总是”以后不再询问，说“是”仅限这次，或按下"),
+    ("{question}? Say always, yes, or no.", "{question}？请说总是、是或否。"),
+    ("{app} is allowed from now on. Change it in Settings › Apps.", "{app} 从现在起已允许。可在“设置 › 应用”中更改。"),
 ];
 
 const JA: Table = &[
@@ -576,6 +594,9 @@ const JA: Table = &[
     ("{count} items", "{count} 項目"), ("Remembering: {text}", "記憶：{text}"), ("Forgetting “{text}”", "「{text}」を忘れます"), ("Save the routine “{name}”: {steps}", "ルーティン「{name}」を保存：{steps}"),
     ("Typing “{text}” into {label} in {app}", "{app} の{label}に「{text}」を入力中"), ("Typing “{text}” into {label} in {app}, then Return", "{app} の{label}に「{text}」を入力して Return"),
     ("Filling {label} in {app} with “{text}”", "{app} の{label}に「{text}」を入力"), ("Filling {label} in {app} with “{text}”, then submitting", "{app} の{label}に「{text}」を入力して送信"), ("Dragging {label} in {app}", "{app} で{label}をドラッグ"),
+    ("Say “always” to stop asking, “yes” for now, or press", "「いつも」で今後は確認しません。「はい」で今回だけ、または押してください"),
+    ("{question}? Say always, yes, or no.", "{question}？ いつも、はい、いいえで答えてください。"),
+    ("{app} is allowed from now on. Change it in Settings › Apps.", "{app} を今後は許可します。設定 › アプリ で変更できます。"),
 ];
 
 #[cfg(test)]

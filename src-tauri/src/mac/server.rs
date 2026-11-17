@@ -48,11 +48,29 @@ pub trait Host: Send + Sync + 'static {
     fn highlight(&self, frame: Option<(f64, f64, f64, f64)>);
     /// Shows the assistant's plan and the step it is on.
     fn plan(&self, _plan: &super::plan::Plan) {}
+    /// Asks for access to an app: yes (this request), always (remembered), or no. By default a
+    /// press means yes.
+    fn grant(&self, question: &str) -> oneshot::Receiver<crate::agents::approvals::Answer> {
+        press_means_yes(self.ask(Ask::Approve, question))
+    }
+    /// The user said "always": keep this app allowed from now on.
+    fn allow_always(&self, _bundle: &str, _name: &str, _need: policy::Need) {}
     /// Asks a coding agent's permission question (show, speak, listen). The receiver yields the
     /// answer and how it was given. The default answers nothing (= deny).
     fn approval(&self, _q: &crate::agents::approvals::Question) -> oneshot::Receiver<(crate::agents::approvals::Answer, Via)> {
         oneshot::channel().1
     }
+}
+
+/// A press (within the wait) as a yes.
+pub fn press_means_yes(press: oneshot::Receiver<()>) -> oneshot::Receiver<crate::agents::approvals::Answer> {
+    let (tx, rx) = oneshot::channel();
+    tokio::spawn(async move {
+        if press.await.is_ok() {
+            let _ = tx.send(crate::agents::approvals::Answer::Yes);
+        }
+    });
+    rx
 }
 
 /// How the user answered a permission question.
@@ -138,8 +156,9 @@ fn new_token() -> String {
 /// The "Control my Mac" server: Mac tools, gated by App access. `seen`: apps whose content the
 /// request already carries (the user's selected text); the gate treats them as read, so acting
 /// elsewhere or sending anything out needs a yes.
-pub async fn start(host: Arc<dyn Host>, exec: Arc<dyn Exec>, policy: Policy, limits: Limits, seen: Vec<String>) -> std::io::Result<Server> {
-    let run = RunState { read_apps: seen.into_iter().collect(), ..Default::default() };
+/// `named`: apps the user asked for (see `consent`), allowed for this request without a question.
+pub async fn start(host: Arc<dyn Host>, exec: Arc<dyn Exec>, policy: Policy, limits: Limits, seen: Vec<String>, named: Vec<String>) -> std::io::Result<Server> {
+    let run = RunState { read_apps: seen.into_iter().collect(), named: named.into_iter().collect(), ..Default::default() };
     serve(host, Toolset::Mac { exec, policy, run: parking_lot::Mutex::new(run) }, limits, "mac").await
 }
 
@@ -428,10 +447,21 @@ async fn call_tool(st: &State, name: &str, args: &Value) -> (Output, bool) {
                     &[("app", &t.name)],
                 );
                 st.host.highlight(t.frame);
-                if !pressed(st, Ask::Approve, &question, st.limits.confirm).await {
-                    st.host.highlight(None);
-                    st.host.record(call.tool(), &question, Outcome::Declined, "");
-                    return text(format!("The user did not allow access to {}. Do not retry; say so. They can allow it in Settings › App access.", t.name), false);
+                let rx = st.host.grant(&question);
+                let answer = tokio::time::timeout(st.limits.answer, rx).await.ok().and_then(Result::ok);
+                st.host.end_ask();
+                use crate::agents::approvals::Answer;
+                match answer {
+                    Some(Answer::Always) => {
+                        st.host.allow_always(&t.bundle, &t.name, need);
+                        st.host.record(call.tool(), &question, Outcome::Done, "allowed always");
+                    }
+                    Some(Answer::Yes) => st.host.record(call.tool(), &question, Outcome::Done, "allowed for this request"),
+                    _ => {
+                        st.host.highlight(None);
+                        st.host.record(call.tool(), &question, Outcome::Declined, "");
+                        return text(format!("The user did not allow access to {}. Do not retry; say so. They can allow it in Settings › App access.", t.name), false);
+                    }
                 }
                 st_run.lock().grants.insert(t.bundle.clone(), need);
             }
@@ -457,6 +487,9 @@ async fn call_tool(st: &State, name: &str, args: &Value) -> (Output, bool) {
             if !pressed(st, Ask::Approve, &what, st.limits.confirm).await {
                 st.host.record(call.tool(), &what, Outcome::Declined, "");
                 return text("The user did not approve this action. Do not retry it; say it was not run.", false);
+            }
+            if let Some(t) = &target {
+                st_run.lock().trusted.insert(t.bundle.clone());
             }
         }
     }
@@ -534,6 +567,20 @@ mod tests {
         fn plan(&self, p: &crate::mac::plan::Plan) {
             self.log.lock().push(format!("plan {} {}", p.progress(), p.current()));
         }
+        fn grant(&self, q: &str) -> oneshot::Receiver<crate::agents::approvals::Answer> {
+            match self.answer {
+                Some((a, _)) => {
+                    self.log.lock().push(format!("grant {q} → {a:?}"));
+                    let (tx, rx) = oneshot::channel();
+                    let _ = tx.send(a);
+                    rx
+                }
+                None => press_means_yes(self.ask(Ask::Approve, q)),
+            }
+        }
+        fn allow_always(&self, bundle: &str, _name: &str, need: crate::mac::policy::Need) {
+            self.log.lock().push(format!("always {bundle} {need:?}"));
+        }
         fn approval(&self, q: &crate::agents::approvals::Question) -> oneshot::Receiver<(crate::agents::approvals::Answer, Via)> {
             self.log.lock().push(format!("approval {}", q.what));
             let (tx, rx) = oneshot::channel();
@@ -596,7 +643,7 @@ mod tests {
     async fn serve_with(press: Option<Duration>, policy: Policy) -> (Server, Arc<FakeHost>, Arc<FakeExec>) {
         let host = Arc::new(FakeHost { press_after: press, ..Default::default() });
         let exec = Arc::new(FakeExec::default());
-        let s = start(host.clone(), exec.clone(), policy, quick(), Vec::new()).await.unwrap();
+        let s = start(host.clone(), exec.clone(), policy, quick(), Vec::new(), Vec::new()).await.unwrap();
         (s, host, exec)
     }
 
@@ -750,6 +797,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_named_app_runs_without_asking_and_always_is_remembered() {
+        let host = Arc::new(FakeHost::default());
+        let exec = Arc::new(FakeExec::default());
+        let s = start(host.clone(), exec.clone(), Policy::default(), quick(), Vec::new(), vec!["com.apple.Notes".into()]).await.unwrap();
+        assert!(!call(&s, "read_window", json!({"app":"Notes"})).await.1, "the app the user asked for");
+        assert!(!host.log.lock().iter().any(|l| l.starts_with("ask")), "no question: {:?}", host.log.lock());
+
+        let host = Arc::new(FakeHost { answer: Some((crate::agents::approvals::Answer::Always, Via::Voice)), ..Default::default() });
+        let s = start(host.clone(), exec.clone(), Policy::default(), quick(), Vec::new(), Vec::new()).await.unwrap();
+        assert!(!call(&s, "read_window", json!({"app":"Chrome"})).await.1);
+        assert!(!call(&s, "read_window", json!({"app":"Chrome"})).await.1);
+        let log = host.log.lock().join("\n");
+        assert_eq!(log.matches("grant ").count(), 1, "asked once: {log}");
+        assert!(log.contains("always com.google.Chrome See"), "{log}");
+
+        let host = Arc::new(FakeHost { answer: Some((crate::agents::approvals::Answer::No, Via::Voice)), ..Default::default() });
+        let s = start(host.clone(), exec, Policy::default(), quick(), Vec::new(), Vec::new()).await.unwrap();
+        let (t, _) = call(&s, "read_window", json!({"app":"Chrome"})).await;
+        assert!(t.contains("did not allow access"), "{t}");
+        assert!(!host.log.lock().iter().any(|l| l.starts_with("always")));
+    }
+
+    #[tokio::test]
     async fn app_access_is_enforced_with_just_this_time_grants() {
         let (s, host, exec) = serve(None).await;
         let (t, _) = call(&s, "read_window", json!({"app":"Chrome"})).await;
@@ -794,7 +864,7 @@ mod tests {
         let p = allow(&[("com.google.Chrome", Access::Control), ("com.apple.Notes", Access::Control)]);
         let host = Arc::new(FakeHost::default());
         let exec = Arc::new(FakeExec::default());
-        let s = start(host, exec.clone(), p.clone(), quick(), vec!["com.google.Chrome".into()]).await.unwrap();
+        let s = start(host, exec.clone(), p.clone(), quick(), vec!["com.google.Chrome".into()], Vec::new()).await.unwrap();
         assert!(!call(&s, "press_keys", json!({"app":"Chrome","keys":"cmd+c"})).await.1, "the app it came from: fine");
         assert!(call(&s, "open_url", json!({"url":"https://a.example"})).await.0.contains("did not approve"), "sending out needs a yes");
         assert!(call(&s, "press_keys", json!({"app":"Notes","keys":"cmd+v"})).await.0.contains("did not approve"), "another app needs a yes");

@@ -112,6 +112,11 @@ pub struct RunState {
     pub grants: HashMap<String, Need>,
     /// Apps whose screen content the model has read in this request.
     pub read_apps: HashSet<String>,
+    /// Apps the user asked for in this request (named, or "this" with the app in front): asking
+    /// is consent, so they are allowed for this request without a question.
+    pub named: HashSet<String>,
+    /// Apps the user said yes to acting in after content was read: not asked again this request.
+    pub trusted: HashSet<String>,
 }
 
 impl RunState {
@@ -171,7 +176,8 @@ pub fn decide(base: Risk, target: Option<&Target>, flags: Flags, policy: &Policy
             return Decision::Refuse(format!("{} is never seen or controlled by the assistant (it holds passwords or security settings, or it is Xpu Command itself).", t.name));
         }
         let level = policy.level(&t.bundle);
-        let granted = run.grants.get(&t.bundle).copied();
+        let named = cls == Class::Normal && run.named.contains(&t.bundle);
+        let granted = run.grants.get(&t.bundle).copied().or(named.then_some(Need::Control));
         let enough = match t.need {
             Need::See => level >= Access::See || granted.is_some(),
             Need::Control => level >= Access::Control || granted == Some(Need::Control),
@@ -191,7 +197,8 @@ pub fn decide(base: Risk, target: Option<&Target>, flags: Flags, policy: &Policy
         if t.unknown_spot && !confirm {
             d = Decision::Grace;
         }
-        if run.tainted() && t.need == Need::Control && !run.read_apps.contains(&t.bundle) {
+        let expected = run.read_apps.contains(&t.bundle) || named || run.trusted.contains(&t.bundle);
+        if run.tainted() && t.need == Need::Control && !expected {
             confirm = true;
         }
     }
@@ -346,5 +353,31 @@ mod tests {
         assert!(!valid_bundle_id("chrome"));
         assert!(!valid_bundle_id("com.x/../y"));
         assert!(!valid_bundle_id(&"a.".repeat(100)));
+    }
+
+    #[test]
+    fn asking_for_an_app_is_consent_but_not_for_terminals_or_secrets() {
+        let p = Policy::default();
+        let mut run = RunState::default();
+        run.named.extend(["com.apple.Notes".to_string(), "com.apple.Terminal".to_string(), "com.apple.keychainaccess".to_string()]);
+        assert_eq!(decide(Risk::Safe, Some(&t("com.apple.Notes", Need::Control)), Flags::default(), &p, &run), Decision::Run);
+        assert_eq!(decide(Risk::Read, Some(&t(CHROME, Need::See)), Flags::default(), &p, &run), Decision::Grant(Need::See), "other apps still ask");
+        assert!(matches!(decide(Risk::Safe, Some(&t("com.apple.Terminal", Need::Control)), Flags::default(), &p, &run), Decision::Refuse(_)), "naming a terminal isn't enough");
+        assert!(matches!(decide(Risk::Read, Some(&t("com.apple.keychainaccess", Need::See)), Flags::default(), &p, &run), Decision::Refuse(_)));
+        let risky = Target { label: Some("button Send".into()), ..t("com.apple.Notes", Need::Control) };
+        assert_eq!(decide(Risk::Safe, Some(&risky), Flags::default(), &p, &run), Decision::Confirm, "sending still needs a yes");
+    }
+
+    #[test]
+    fn after_reading_only_unexpected_apps_ask_and_a_yes_holds() {
+        let p = policy(&[(CHROME, Access::Control), ("com.apple.Notes", Access::Control), ("com.apple.mail", Access::Control)]);
+        let mut run = RunState::default();
+        run.read_apps.insert(CHROME.into());
+        run.named.insert("com.apple.Notes".into());
+        assert_eq!(decide(Risk::Safe, Some(&t("com.apple.Notes", Need::Control)), Flags::default(), &p, &run), Decision::Run, "the app the user named");
+        assert_eq!(decide(Risk::Safe, Some(&t("com.apple.mail", Need::Control)), Flags::default(), &p, &run), Decision::Confirm, "an app the user didn't mention");
+        run.trusted.insert("com.apple.mail".into());
+        assert_eq!(decide(Risk::Safe, Some(&t("com.apple.mail", Need::Control)), Flags::default(), &p, &run), Decision::Run, "once allowed, not asked again");
+        assert_eq!(decide(Risk::Safe, None, Flags { outbound: true, risky: false }, &p, &run), Decision::Confirm, "sending out after reading still asks");
     }
 }

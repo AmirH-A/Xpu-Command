@@ -69,6 +69,7 @@ const EN = [
   "“Hey Xpu”",
   "Say it, then your request. Checked on this Mac; the microphone stays on while this is on.",
   "“Hey Xpu” is not listening:",
+  "Naming an app in your request allows it for that request (“reply in Slack”), and so does “this” for the app in front. When asked, say “always” and it won’t ask about that app again.",
 ] as const;
 
 type Same<T extends readonly unknown[]> = { readonly [K in keyof T]: string };
@@ -133,6 +134,7 @@ const FA: Tr = [
   "«Hey Xpu»",
   "اول بگویید، بعد درخواستتان را. روی همین مک بررسی می‌شود؛ تا وقتی روشن است، میکروفون روشن می‌ماند.",
   "«Hey Xpu» گوش نمی‌دهد:",
+  "اگر در درخواستتان اسم برنامه را بیاورید، برای همان درخواست مجاز می‌شود («در Slack جواب بده»)؛ گفتن «این» هم برنامهٔ جلو را مجاز می‌کند. وقتی پرسید، بگویید «همیشه» تا دیگر دربارهٔ آن برنامه نپرسد.",
 ];
 
 const ES: Tr = [
@@ -194,6 +196,7 @@ const ES: Tr = [
   "«Hey Xpu»",
   "Dilo y luego tu petición. Se comprueba en este Mac; el micrófono sigue activo mientras esté encendido.",
   "«Hey Xpu» no está escuchando:",
+  "Nombrar una app en tu petición la permite para esa petición («responde en Slack»), y decir «esto» permite la app que tienes delante. Cuando pregunte, di «siempre» y no volverá a preguntar por esa app.",
 ];
 
 const DE: Tr = [
@@ -255,6 +258,7 @@ const DE: Tr = [
   "„Hey Xpu“",
   "Sag es, dann deine Anfrage. Wird auf diesem Mac geprüft; das Mikrofon bleibt an, solange das an ist.",
   "„Hey Xpu“ hört nicht zu:",
+  "Wenn du eine App in deiner Anfrage nennst, ist sie für diese Anfrage erlaubt („antworte in Slack“), ebenso mit „das hier“ die App im Vordergrund. Sag bei der Frage „immer“, dann fragt es für diese App nicht mehr.",
 ];
 
 const FR: Tr = [
@@ -316,6 +320,7 @@ const FR: Tr = [
   "« Hey Xpu »",
   "Dites-le, puis votre demande. Vérifié sur ce Mac ; le micro reste allumé tant que c’est activé.",
   "« Hey Xpu » n’écoute pas :",
+  "Nommer une app dans votre demande l’autorise pour cette demande (« réponds dans Slack »), et « ceci » autorise l’app au premier plan. Quand il demande, dites « toujours » et il ne redemandera plus pour cette app.",
 ];
 
 const AR: Tr = [
@@ -377,6 +382,7 @@ const AR: Tr = [
   "«Hey Xpu»",
   "قلها ثم طلبك. يتم التحقق على هذا الماك؛ يبقى الميكروفون مفتوحًا ما دام هذا مفعّلًا.",
   "«Hey Xpu» لا يستمع:",
+  "ذكر اسم تطبيق في طلبك يسمح به لذلك الطلب («رد في Slack»)، وكذلك قول «هذا» للتطبيق الظاهر. عند السؤال قل «دائمًا» فلن يسأل عن ذلك التطبيق مجددًا.",
 ];
 
 const ZH: Tr = [
@@ -438,6 +444,7 @@ const ZH: Tr = [
   "“Hey Xpu”",
   "先说它，再说你的请求。在这台 Mac 上识别；开启期间麦克风保持打开。",
   "“Hey Xpu”未在聆听：",
+  "在请求中说出应用名称即可在本次请求中允许它（“在 Slack 里回复”），说“这个”则允许最前面的应用。被询问时说“总是”，以后就不会再为该应用询问。",
 ];
 
 const JA: Tr = [
@@ -499,6 +506,7 @@ const JA: Tr = [
   "「Hey Xpu」",
   "これに続けて依頼を話します。この Mac 上で判定し、オンの間はマイクがオンのままです。",
   "「Hey Xpu」は聞き取りできません：",
+  "依頼でアプリ名を言うと、その依頼ではそのアプリが許可されます（「Slack で返信して」）。「これ」と言えば前面のアプリが許可されます。確認されたら「いつも」と言えば、そのアプリについて今後は聞きません。",
 ];
 
 const TABLES: Record<Exclude<Lang, 'en'>, Tr> = { fa: FA, es: ES, de: DE, fr: FR, ar: AR, zh: ZH, ja: JA };

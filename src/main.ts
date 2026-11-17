@@ -686,6 +686,14 @@ async function init() {
   };
   $('clear-key').onclick = async () => { await invoke('clear_cloud_key'); flash('Key removed'); await refreshStatus(); };
   await listen<[string, number]>('model-progress', ({ payload: [, pct] }) => { downloadPct = pct; syncProgress(); });
+  // "Always" said to the assistant is already saved: take it in, so the next save keeps it.
+  await listen<[string, Access]>('app-access-changed', ({ payload: [bundle, level] }) => {
+    const saved = JSON.parse(savedJson) as Settings;
+    saved.app_access[bundle] = level;
+    savedJson = JSON.stringify(saved);
+    s.app_access[bundle] = level;
+    renderApps();
+  });
 }
 
 init().catch((e) => flash(String(e), true));

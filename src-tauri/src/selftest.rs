@@ -341,7 +341,7 @@ fn mac_request(text: &str) {
         let seen = context.iter().filter(|c| c.selection.is_some()).map(|c| c.bundle.clone()).collect();
         let full = crate::mac::with_context(text, context.as_ref());
         let exec = std::sync::Arc::new(crate::mac::exec::MacExec::new(policy.clone(), crate::mac::workspace().unwrap()));
-        let server = crate::mac::server::start(std::sync::Arc::new(ConsoleHost), exec, policy, Default::default(), seen).await.unwrap();
+        let server = crate::mac::server::start(std::sync::Arc::new(ConsoleHost), exec, policy, Default::default(), seen, Vec::new()).await.unwrap();
         let config = crate::mac::McpConfigFile::create(&crate::settings::config_dir().unwrap(), &server.mcp_config()).unwrap();
         let workspace = crate::mac::workspace().unwrap();
         let lang = crate::speech::language_of(text, "en").unwrap_or("en");

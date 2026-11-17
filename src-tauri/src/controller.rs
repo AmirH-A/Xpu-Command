@@ -161,6 +161,36 @@ impl crate::mac::server::Host for MacHost {
         *self.step.lock() = Some(plan.progress());
         self.ctl.overlay(&self.app, Phase::Working, plan.current(), Some(&self.label()));
     }
+    fn grant(&self, question: &str) -> tokio::sync::oneshot::Receiver<crate::agents::approvals::Answer> {
+        let hint = tr("Say “always” to stop asking, “yes” for now, or press").to_string();
+        let spoken = trf("{question}? Say always, yes, or no.", &[("question", question)]);
+        let heard = self.ctl.listen_for_answer(&self.app, format!("{question}?"), hint, spoken, self.speak, true);
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        tauri::async_runtime::spawn(async move {
+            if let Ok((a, _)) = heard.await {
+                let _ = tx.send(a);
+            }
+        });
+        rx
+    }
+    fn allow_always(&self, bundle: &str, name: &str, need: crate::mac::policy::Need) {
+        use crate::mac::policy::{Access, Need};
+        let want = if need == Need::See { Access::See } else { Access::Control };
+        let saved = {
+            let mut s = self.ctl.settings.write();
+            let now = s.app_access.get(bundle).copied().unwrap_or(Access::Off);
+            if now == Access::Ask || now >= want {
+                return;
+            }
+            s.app_access.insert(bundle.to_string(), want);
+            s.clone()
+        };
+        if let Err(e) = crate::settings::save(&saved) {
+            log::warn!("saving app access: {e}");
+        }
+        let _ = self.app.emit_to("main", "app-access-changed", (bundle.to_string(), want));
+        self.ctl.overlay(&self.app, Phase::Working, &trf("{app} is allowed from now on. Change it in Settings › Apps.", &[("app", name)]), Some(&self.label()));
+    }
     fn ask(&self, ask: crate::mac::server::Ask, text: &str) -> tokio::sync::oneshot::Receiver<()> {
         let (tx, rx) = tokio::sync::oneshot::channel();
         *self.ctl.pending.lock() = Some(tx);
@@ -214,9 +244,6 @@ impl crate::mac::server::Host for AgentHost {
     fn highlight(&self, _frame: Option<(f64, f64, f64, f64)>) {}
 
     fn approval(&self, q: &crate::agents::approvals::Question) -> tokio::sync::oneshot::Receiver<(crate::agents::approvals::Answer, crate::mac::server::Via)> {
-        use crate::agents::approvals::{parse_answer, Answer};
-        use crate::mac::server::Via;
-        let (tx, rx) = tokio::sync::oneshot::channel();
         let shown = trf("{agent} wants to {what}", &[("agent", &self.agent), ("what", &q.what)]);
         let hint = match q.danger {
             Some(d) => trf("This {danger}: say “yes” to allow", &[("danger", tr(d))]),
@@ -229,68 +256,7 @@ impl crate::mac::server::Host for AgentHost {
                 None => trf("{agent} wants to {what}. Say yes or no.", &[("agent", &self.agent), ("what", &what)]),
             }
         };
-        let (ctl, app, speak, danger) = (self.ctl.clone(), self.app.clone(), self.speak, q.danger.is_some());
-        let arm = move |ctl: &Arc<Controller>| {
-            let (ptx, prx) = tokio::sync::oneshot::channel::<()>();
-            *ctl.pending.lock() = Some(ptx);
-            prx
-        };
-        let mut press = arm(&ctl);
-        ctl.overlay(&app, Phase::Confirm, &shown, Some(&hint));
-        tauri::async_runtime::spawn(async move {
-            if speak {
-                speech::speak_and_wait(spoken).await;
-            } else if ctl.settings.read().sound_cues {
-                crate::cues::play(crate::cues::Cue::Start);
-            }
-            let s = ctl.settings.read().clone();
-            for _ in 0..8 {
-                if tx.is_closed() {
-                    return;
-                }
-                let listen = ctl.recording.lock().is_none();
-                tokio::select! {
-                    r = &mut press => {
-                        if r.is_err() {
-                            return;
-                        }
-                        if danger {
-                            ctl.overlay(&app, Phase::Confirm, &shown, Some(tr("A press can't allow this one: say “yes”")));
-                            press = arm(&ctl);
-                            continue;
-                        }
-                        let _ = tx.send((Answer::Yes, Via::Press));
-                        return;
-                    }
-                    heard = ctl.capture_answer(&app, Duration::from_secs(9)), if listen => {
-                        let audio = match heard {
-                            Ok(Some(a)) => a,
-                            Ok(None) => continue,
-                            Err(e) => {
-                                log::warn!("listening for an answer: {e}");
-                                tokio::time::sleep(Duration::from_secs(1)).await;
-                                continue;
-                            }
-                        };
-                        let text = ctl.transcribe(&s, audio, String::new()).await.unwrap_or_default();
-                        match parse_answer(&text) {
-                            Some(a) => {
-                                let _ = tx.send((a, Via::Voice));
-                                return;
-                            }
-                            None if !text.is_empty() => {
-                                ctl.overlay(&app, Phase::Confirm, &shown, Some(tr("Sorry: yes or no?")));
-                                if speak {
-                                    speech::speak_and_wait(tr("Sorry, yes or no?").to_string()).await;
-                                }
-                            }
-                            None => {}
-                        }
-                    }
-                }
-            }
-        });
-        rx
+        self.ctl.listen_for_answer(&self.app, shown, hint, spoken, self.speak, q.danger.is_none())
     }
 }
 
@@ -378,6 +344,84 @@ impl Controller {
             timing: Mutex::new(None),
             typed: Mutex::new(None),
         }
+    }
+
+    /// Shows a question and waits for a spoken yes, no or always (or a press, when `press_ok`:
+    /// a press is yes). Speaks the question first when `speak`.
+    fn listen_for_answer(
+        self: &Arc<Self>,
+        app: &AppHandle,
+        shown: String,
+        hint: String,
+        spoken: String,
+        speak: bool,
+        press_ok: bool,
+    ) -> tokio::sync::oneshot::Receiver<(crate::agents::approvals::Answer, crate::mac::server::Via)> {
+        use crate::agents::approvals::{parse_answer, Answer};
+        use crate::mac::server::Via;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let (ctl, app) = (self.clone(), app.clone());
+        let arm = move |ctl: &Arc<Controller>| {
+            let (ptx, prx) = tokio::sync::oneshot::channel::<()>();
+            *ctl.pending.lock() = Some(ptx);
+            prx
+        };
+        let mut press = arm(&ctl);
+        ctl.overlay(&app, Phase::Confirm, &shown, Some(&hint));
+        tauri::async_runtime::spawn(async move {
+            if speak {
+                speech::speak_and_wait(spoken).await;
+            } else if ctl.settings.read().sound_cues {
+                crate::cues::play(crate::cues::Cue::Start);
+            }
+            let s = ctl.settings.read().clone();
+            for _ in 0..8 {
+                if tx.is_closed() {
+                    return;
+                }
+                let listen = ctl.recording.lock().is_none();
+                tokio::select! {
+                    r = &mut press => {
+                        if r.is_err() {
+                            return;
+                        }
+                        if !press_ok {
+                            ctl.overlay(&app, Phase::Confirm, &shown, Some(tr("A press can't allow this one: say “yes”")));
+                            press = arm(&ctl);
+                            continue;
+                        }
+                        let _ = tx.send((Answer::Yes, Via::Press));
+                        return;
+                    }
+                    heard = ctl.capture_answer(&app, Duration::from_secs(9)), if listen => {
+                        let audio = match heard {
+                            Ok(Some(a)) => a,
+                            Ok(None) => continue,
+                            Err(e) => {
+                                log::warn!("listening for an answer: {e}");
+                                tokio::time::sleep(Duration::from_secs(1)).await;
+                                continue;
+                            }
+                        };
+                        let text = ctl.transcribe(&s, audio, String::new()).await.unwrap_or_default();
+                        match parse_answer(&text) {
+                            Some(a) => {
+                                let _ = tx.send((a, Via::Voice));
+                                return;
+                            }
+                            None if !text.is_empty() => {
+                                ctl.overlay(&app, Phase::Confirm, &shown, Some(tr("Sorry: yes or no?")));
+                                if speak {
+                                    speech::speak_and_wait(tr("Sorry, yes or no?").to_string()).await;
+                                }
+                            }
+                            None => {}
+                        }
+                    }
+                }
+            }
+        });
+        rx
     }
 
     /// A press while a Mac action is shown answers it (cancel or approve) instead of starting to talk.
@@ -1037,8 +1081,17 @@ impl Controller {
             crate::activity::record("context", &c.summary(), crate::mac::server::Outcome::Done, "");
         }
         let seen: Vec<String> = context.iter().filter(|c| c.selection.is_some()).map(|c| c.bundle.clone()).collect();
+        let named = {
+            let (t, front) = (text.to_string(), context.as_ref().map(|c| (c.bundle.clone(), c.app.clone())));
+            tokio::task::spawn_blocking(move || consented(&t, front)).await.unwrap_or_default()
+        };
+        if !named.is_empty() {
+            let names: Vec<&str> = named.iter().map(|(_, n)| n.as_str()).collect();
+            crate::activity::record("consent", &format!("Allowed for this request because you asked: {}", names.join(", ")), crate::mac::server::Outcome::Done, "");
+        }
+        let named: Vec<String> = named.into_iter().map(|(b, _)| b).collect();
         let exec = Arc::new(crate::mac::exec::MacExec::new(policy.clone(), workspace.clone()).with_memory(s.memory));
-        let server = crate::mac::server::start(host, exec, policy, Default::default(), seen).await?;
+        let server = crate::mac::server::start(host, exec, policy, Default::default(), seen, named).await?;
         let config = crate::mac::McpConfigFile::create(&crate::settings::config_dir()?, &server.mcp_config())?;
         let memory = if s.memory { crate::memory::prompt_block(&crate::memory::list()) } else { String::new() };
         let lang = speech::language_of(text, &s.language).unwrap_or("en");
@@ -1172,6 +1225,38 @@ impl Controller {
             }
         });
     }
+}
+
+/// The apps (bundle id, name) the request itself asks for: named installed or running apps, the
+/// app in front when it says "this", and the user's files when it mentions one.
+#[cfg(target_os = "macos")]
+fn consented(text: &str, front: Option<(String, String)>) -> Vec<(String, String)> {
+    use crate::mac::consent;
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut add = |b: String, n: String| {
+        if !out.iter().any(|(x, _)| *x == b) {
+            out.push((b, n));
+        }
+    };
+    let running = crate::mac::ui::apps_on_screen();
+    for name in consent::mentioned(text, running.iter().map(|a| a.name.as_str())) {
+        if let Some(a) = running.iter().find(|a| a.name == name) {
+            add(a.bundle.clone(), a.name.clone());
+        }
+    }
+    let installed = crate::mac::apps::installed();
+    for name in consent::mentioned(text, installed.iter().map(|a| a.name.as_str())) {
+        if let Some((bundle, shown)) = installed.iter().find(|a| a.name == name).and_then(|a| crate::mac::ui::bundle_info(&a.path)) {
+            add(bundle, shown);
+        }
+    }
+    if let Some((bundle, name)) = front.filter(|_| consent::points_at_front(text)) {
+        add(bundle, name);
+    }
+    if consent::mentions_files(text) {
+        add(crate::mac::policy::FILES.to_string(), "Your files".to_string());
+    }
+    out
 }
 
 /// The app in front (its process and bundle id), where a dictation will be typed.
