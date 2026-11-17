@@ -1,5 +1,6 @@
 //! Debug builds only: run the pipeline without the GUI.
 //!   xpu-command --selftest-stt <file.wav> [model]       transcribe a 16-bit PCM WAV with the local engine
+//!   xpu-command --selftest-bench [task-id…]             the benchmark: real tasks end to end, scored (see bench.rs)
 //!   xpu-command --selftest-wake <model> <lang> <file.wav>…  what the wake-phrase check hears in each file
 //!   xpu-command --selftest-agent <claude|codex> <dir> <prompt…>   run an agent headless, print events
 //!   xpu-command --selftest-mac-tool <tool> '<json>'    validate and run one Mac tool directly (no model, no gate)
@@ -24,6 +25,11 @@ pub fn maybe_run() -> bool {
                 }
             }
             true
+        }
+        #[cfg(target_os = "macos")]
+        Some("--selftest-bench") => {
+            let ok = crate::bench::run(&args[2..]);
+            std::process::exit(if ok { 0 } else { 1 });
         }
         Some("--selftest-wake") => {
             let engine = stt::LocalEngine::default();

@@ -25,10 +25,13 @@ mod secrets;
 mod settings;
 mod speech;
 mod stt;
+mod trace;
 mod vad;
 mod wake;
 #[cfg(debug_assertions)]
 mod selftest;
+#[cfg(all(debug_assertions, target_os = "macos"))]
+mod bench;
 
 use controller::Controller;
 use std::sync::Arc;
@@ -86,6 +89,7 @@ pub fn run() {
             commands::claude_profiles,
             commands::knock_status,
             commands::wake_status,
+            commands::request_stats,
             commands::activity_recent,
             commands::app_access_list,
             commands::request_screen_recording,

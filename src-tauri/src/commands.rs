@@ -227,6 +227,15 @@ pub fn claude_profiles() -> Vec<String> {
     settings::claude_profiles()
 }
 
+/// How the last 100 Mac requests went (success and speed), from the traces kept on this Mac.
+#[tauri::command]
+pub fn request_stats() -> crate::trace::Stats {
+    use crate::trace::Route;
+    let all = crate::trace::load();
+    let mac: Vec<&crate::trace::Trace> = all.iter().filter(|t| matches!(t.route, Route::Assistant | Route::Instant | Route::Routine)).collect();
+    crate::trace::Stats::of(mac[mac.len().saturating_sub(100)..].iter().copied())
+}
+
 /// Why "Hey Xpu" isn't listening although it is on, if so. While Settings is open this is asked
 /// every few seconds, so a fixed problem (a model just downloaded) starts it again.
 #[tauri::command]

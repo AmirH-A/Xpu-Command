@@ -495,7 +495,43 @@ async function fixIt(fix: string) {
   await refreshHealth();
 }
 
+type Speed = { count: number; p50_ms: number; p90_ms: number; max_ms: number };
+type Stats = { count: number; ok: number; one_step: Speed; multi_step: Speed; goal_success: number; goal_one_step_ms: number; goal_multi_step_ms: number };
+
+function statRow(ok: boolean | null, title: string, detail: string): HTMLLIElement {
+  const li = document.createElement('li');
+  li.className = ok === true ? 'ok' : ok === false ? 'bad' : 'unknown';
+  const mark = document.createElement('i');
+  mark.setAttribute('aria-hidden', 'true');
+  mark.textContent = ok === true ? '✓' : ok === false ? '!' : '?';
+  const text = document.createElement('div');
+  const b = document.createElement('b');
+  b.textContent = title;
+  const small = document.createElement('small');
+  small.textContent = detail;
+  text.append(b, small);
+  li.append(mark, text);
+  return li;
+}
+
+async function refreshSpeed() {
+  const st = await invoke<Stats>('request_stats');
+  const sec = (ms: number) => (ms / 1000).toFixed(1);
+  if (!st.count) {
+    $('speed').replaceChildren(statRow(null, t('No requests yet'), t('Ask Control my Mac something, and success and speed show up here.')));
+    return;
+  }
+  const pct = Math.round((st.ok / st.count) * 100);
+  const rows = [statRow(pct >= st.goal_success * 100, t('{pct}% of the last {n} requests worked', { pct, n: st.count }), t('Goal: 90% or more.'))];
+  for (const [sp, goal, label] of [[st.one_step, st.goal_one_step_ms, 'One step'], [st.multi_step, st.goal_multi_step_ms, 'Several steps']] as const) {
+    if (!sp.count) continue;
+    rows.push(statRow(sp.p50_ms <= goal, t('{label}: typically {s} s', { label: t(label), s: sec(sp.p50_ms) }), t('Goal: {g} s. Slowest {max} s, over {n} requests.', { g: sec(goal), max: sec(sp.max_ms), n: sp.count })));
+  }
+  $('speed').replaceChildren(...rows);
+}
+
 async function refreshHealth() {
+  void quietly(refreshSpeed);
   const checks = await invoke<Check[]>('health_check');
   const bad = checks.filter((c) => c.ok === false).length;
   $('health-count').textContent = bad ? String(bad) : '';

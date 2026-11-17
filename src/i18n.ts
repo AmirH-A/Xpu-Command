@@ -70,6 +70,15 @@ const EN = [
   "Say it, then your request. Checked on this Mac; the microphone stays on while this is on.",
   "“Hey Xpu” is not listening:",
   "Naming an app in your request allows it for that request (“reply in Slack”), and so does “this” for the app in front. When asked, say “always” and it won’t ask about that app again.",
+  "How it's doing",
+  "No requests yet",
+  "Ask Control my Mac something, and success and speed show up here.",
+  "{pct}% of the last {n} requests worked",
+  "Goal: 90% or more.",
+  "One step",
+  "Several steps",
+  "{label}: typically {s} s",
+  "Goal: {g} s. Slowest {max} s, over {n} requests.",
 ] as const;
 
 type Same<T extends readonly unknown[]> = { readonly [K in keyof T]: string };
@@ -135,6 +144,15 @@ const FA: Tr = [
   "اول بگویید، بعد درخواستتان را. روی همین مک بررسی می‌شود؛ تا وقتی روشن است، میکروفون روشن می‌ماند.",
   "«Hey Xpu» گوش نمی‌دهد:",
   "اگر در درخواستتان اسم برنامه را بیاورید، برای همان درخواست مجاز می‌شود («در Slack جواب بده»)؛ گفتن «این» هم برنامهٔ جلو را مجاز می‌کند. وقتی پرسید، بگویید «همیشه» تا دیگر دربارهٔ آن برنامه نپرسد.",
+  "عملکرد",
+  "هنوز درخواستی نیست",
+  "از «کنترل مک» چیزی بخواهید تا موفقیت و سرعت اینجا نشان داده شود.",
+  "{pct}٪ از {n} درخواست اخیر انجام شد",
+  "هدف: ۹۰٪ یا بیشتر.",
+  "یک‌مرحله‌ای",
+  "چندمرحله‌ای",
+  "{label}: معمولاً {s} ثانیه",
+  "هدف: {g} ثانیه. کندترین {max} ثانیه، در {n} درخواست.",
 ];
 
 const ES: Tr = [
@@ -197,6 +215,15 @@ const ES: Tr = [
   "Dilo y luego tu petición. Se comprueba en este Mac; el micrófono sigue activo mientras esté encendido.",
   "«Hey Xpu» no está escuchando:",
   "Nombrar una app en tu petición la permite para esa petición («responde en Slack»), y decir «esto» permite la app que tienes delante. Cuando pregunte, di «siempre» y no volverá a preguntar por esa app.",
+  "Cómo va",
+  "Aún no hay peticiones",
+  "Pide algo a Controlar mi Mac y aquí verás el éxito y la velocidad.",
+  "Funcionó el {pct}% de las últimas {n} peticiones",
+  "Objetivo: 90% o más.",
+  "Un paso",
+  "Varios pasos",
+  "{label}: normalmente {s} s",
+  "Objetivo: {g} s. La más lenta {max} s, en {n} peticiones.",
 ];
 
 const DE: Tr = [
@@ -259,6 +286,15 @@ const DE: Tr = [
   "Sag es, dann deine Anfrage. Wird auf diesem Mac geprüft; das Mikrofon bleibt an, solange das an ist.",
   "„Hey Xpu“ hört nicht zu:",
   "Wenn du eine App in deiner Anfrage nennst, ist sie für diese Anfrage erlaubt („antworte in Slack“), ebenso mit „das hier“ die App im Vordergrund. Sag bei der Frage „immer“, dann fragt es für diese App nicht mehr.",
+  "Wie es läuft",
+  "Noch keine Anfragen",
+  "Bitte „Mac steuern“ um etwas, dann siehst du hier Erfolg und Tempo.",
+  "{pct} % der letzten {n} Anfragen haben geklappt",
+  "Ziel: 90 % oder mehr.",
+  "Ein Schritt",
+  "Mehrere Schritte",
+  "{label}: meist {s} s",
+  "Ziel: {g} s. Langsamste {max} s, bei {n} Anfragen.",
 ];
 
 const FR: Tr = [
@@ -321,6 +357,15 @@ const FR: Tr = [
   "Dites-le, puis votre demande. Vérifié sur ce Mac ; le micro reste allumé tant que c’est activé.",
   "« Hey Xpu » n’écoute pas :",
   "Nommer une app dans votre demande l’autorise pour cette demande (« réponds dans Slack »), et « ceci » autorise l’app au premier plan. Quand il demande, dites « toujours » et il ne redemandera plus pour cette app.",
+  "Comment ça se passe",
+  "Aucune demande pour l’instant",
+  "Demandez quelque chose à Contrôler mon Mac : la réussite et la vitesse s’afficheront ici.",
+  "{pct} % des {n} dernières demandes ont abouti",
+  "Objectif : 90 % ou plus.",
+  "Une étape",
+  "Plusieurs étapes",
+  "{label} : en général {s} s",
+  "Objectif : {g} s. La plus lente {max} s, sur {n} demandes.",
 ];
 
 const AR: Tr = [
@@ -383,6 +428,15 @@ const AR: Tr = [
   "قلها ثم طلبك. يتم التحقق على هذا الماك؛ يبقى الميكروفون مفتوحًا ما دام هذا مفعّلًا.",
   "«Hey Xpu» لا يستمع:",
   "ذكر اسم تطبيق في طلبك يسمح به لذلك الطلب («رد في Slack»)، وكذلك قول «هذا» للتطبيق الظاهر. عند السؤال قل «دائمًا» فلن يسأل عن ذلك التطبيق مجددًا.",
+  "الأداء",
+  "لا طلبات بعد",
+  "اطلب شيئًا من التحكم في الماك لتظهر هنا نسبة النجاح والسرعة.",
+  "نجح {pct}٪ من آخر {n} طلبات",
+  "الهدف: 90٪ أو أكثر.",
+  "خطوة واحدة",
+  "عدة خطوات",
+  "{label}: عادةً {s} ث",
+  "الهدف: {g} ث. الأبطأ {max} ث، على مدى {n} طلبات.",
 ];
 
 const ZH: Tr = [
@@ -445,6 +499,15 @@ const ZH: Tr = [
   "先说它，再说你的请求。在这台 Mac 上识别；开启期间麦克风保持打开。",
   "“Hey Xpu”未在聆听：",
   "在请求中说出应用名称即可在本次请求中允许它（“在 Slack 里回复”），说“这个”则允许最前面的应用。被询问时说“总是”，以后就不会再为该应用询问。",
+  "运行情况",
+  "还没有请求",
+  "让“控制我的 Mac”做点事，这里就会显示成功率和速度。",
+  "最近 {n} 个请求中有 {pct}% 成功",
+  "目标：90% 或更高。",
+  "单步",
+  "多步",
+  "{label}：通常 {s} 秒",
+  "目标：{g} 秒。最慢 {max} 秒，共 {n} 个请求。",
 ];
 
 const JA: Tr = [
@@ -507,6 +570,15 @@ const JA: Tr = [
   "これに続けて依頼を話します。この Mac 上で判定し、オンの間はマイクがオンのままです。",
   "「Hey Xpu」は聞き取りできません：",
   "依頼でアプリ名を言うと、その依頼ではそのアプリが許可されます（「Slack で返信して」）。「これ」と言えば前面のアプリが許可されます。確認されたら「いつも」と言えば、そのアプリについて今後は聞きません。",
+  "状況",
+  "まだ依頼はありません",
+  "「Mac を操作」に何か頼むと、成功率と速さがここに表示されます。",
+  "直近 {n} 件の依頼のうち {pct}% が成功",
+  "目標：90% 以上。",
+  "1 ステップ",
+  "複数ステップ",
+  "{label}：通常 {s} 秒",
+  "目標：{g} 秒。最も遅いのは {max} 秒（{n} 件中）。",
 ];
 
 const TABLES: Record<Exclude<Lang, 'en'>, Tr> = { fa: FA, es: ES, de: DE, fr: FR, ar: AR, zh: ZH, ja: JA };

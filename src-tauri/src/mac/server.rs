@@ -53,6 +53,8 @@ pub trait Host: Send + Sync + 'static {
     fn grant(&self, question: &str) -> oneshot::Receiver<crate::agents::approvals::Answer> {
         press_means_yes(self.ask(Ask::Approve, question))
     }
+    /// A step ended after `ms` (including any question to the user), for the request's trace.
+    fn traced(&self, _tool: &str, _outcome: Outcome, _ms: u64, _detail: &str) {}
     /// The user said "always": keep this app allowed from now on.
     fn allow_always(&self, _bundle: &str, _name: &str, _need: policy::Need) {}
     /// Asks a coding agent's permission question (show, speak, listen). The receiver yields the
@@ -364,6 +366,7 @@ fn show_plan(st: &State, args: &Value) -> (Output, bool) {
                 st.host.record(super::plan::TOOL, &p.summary(), Outcome::Done, "");
             }
             st.host.plan(&p);
+            st.host.traced(super::plan::TOOL, Outcome::Done, 0, p.current());
             text("Shown to the user.", false)
         }
         Err(e) => text(format!("Refused: {e}"), true),
@@ -408,9 +411,16 @@ async fn pressed(st: &State, ask: Ask, what: &str, wait: Duration) -> bool {
     r
 }
 
+/// Records a step in the activity log and its time (since the call began) in the trace.
+fn log(st: &State, started: std::time::Instant, tool: &str, summary: &str, outcome: Outcome, detail: &str) {
+    st.host.record(tool, summary, outcome, detail);
+    st.host.traced(tool, outcome, started.elapsed().as_millis() as u64, if detail.is_empty() { summary } else { detail });
+}
+
 /// The gate. Validate → resolve the real app → decide (app access, risk, history, step-by-step) →
 /// ask if needed → run → record.
 async fn call_tool(st: &State, name: &str, args: &Value) -> (Output, bool) {
+    let started = std::time::Instant::now();
     let Toolset::Mac { exec: st_exec, policy: st_policy, run: st_run } = &st.tools else {
         return text("Refused: this server has no Mac tools", true);
     };
@@ -418,13 +428,13 @@ async fn call_tool(st: &State, name: &str, args: &Value) -> (Output, bool) {
     *calls += 1;
     let tool = crate::agents::clip(name, 40);
     if *calls > st.limits.max_calls {
-        st.host.record(&tool, "", Outcome::Refused, "too many actions in one request");
+        log(st, started, &tool, "", Outcome::Refused, "too many actions in one request");
         return text(format!("Refused: at most {} actions per request. Stop and tell the user what is left.", st.limits.max_calls), true);
     }
     let call = match tools::parse(name, args, chrono::Local::now().naive_local()) {
         Ok(c) => c,
         Err(e) => {
-            st.host.record(&tool, "", Outcome::Refused, &e);
+            log(st, started, &tool, "", Outcome::Refused, &e);
             return text(format!("Refused: {e}"), true);
         }
     };
@@ -433,7 +443,7 @@ async fn call_tool(st: &State, name: &str, args: &Value) -> (Output, bool) {
     let target = match tokio::task::spawn_blocking(move || exec.target(&c)).await.unwrap_or_else(|_| Err("the check crashed".into())) {
         Ok(t) => t,
         Err(e) => {
-            st.host.record(call.tool(), &call.describe(), Outcome::Failed, &e);
+            log(st, started, call.tool(), &call.describe(), Outcome::Failed, &e);
             return text(format!("Failed: {e}"), true);
         }
     };
@@ -454,12 +464,12 @@ async fn call_tool(st: &State, name: &str, args: &Value) -> (Output, bool) {
                 match answer {
                     Some(Answer::Always) => {
                         st.host.allow_always(&t.bundle, &t.name, need);
-                        st.host.record(call.tool(), &question, Outcome::Done, "allowed always");
+                        log(st, started, call.tool(), &question, Outcome::Done, "allowed always");
                     }
-                    Some(Answer::Yes) => st.host.record(call.tool(), &question, Outcome::Done, "allowed for this request"),
+                    Some(Answer::Yes) => log(st, started, call.tool(), &question, Outcome::Done, "allowed for this request"),
                     _ => {
                         st.host.highlight(None);
-                        st.host.record(call.tool(), &question, Outcome::Declined, "");
+                        log(st, started, call.tool(), &question, Outcome::Declined, "");
                         return text(format!("The user did not allow access to {}. Do not retry; say so. They can allow it in Settings › App access.", t.name), false);
                     }
                 }
@@ -470,7 +480,7 @@ async fn call_tool(st: &State, name: &str, args: &Value) -> (Output, bool) {
     };
     match decision {
         Decision::Refuse(why) => {
-            st.host.record(call.tool(), &what, Outcome::Refused, &why);
+            log(st, started, call.tool(), &what, Outcome::Refused, &why);
             return text(format!("Refused: {why}"), true);
         }
         Decision::Grant(_) => unreachable!("handled above"),
@@ -478,14 +488,14 @@ async fn call_tool(st: &State, name: &str, args: &Value) -> (Output, bool) {
         Decision::Grace => {
             st.host.highlight(target.as_ref().and_then(|t| t.frame));
             if pressed(st, Ask::Cancel, &what, st.limits.grace).await {
-                st.host.record(call.tool(), &what, Outcome::Cancelled, "");
+                log(st, started, call.tool(), &what, Outcome::Cancelled, "");
                 return text("The user cancelled this action. Do not retry it; say it was cancelled.", false);
             }
         }
         Decision::Confirm => {
             st.host.highlight(target.as_ref().and_then(|t| t.frame));
             if !pressed(st, Ask::Approve, &what, st.limits.confirm).await {
-                st.host.record(call.tool(), &what, Outcome::Declined, "");
+                log(st, started, call.tool(), &what, Outcome::Declined, "");
                 return text("The user did not approve this action. Do not retry it; say it was not run.", false);
             }
             if let Some(t) = &target {
@@ -510,14 +520,14 @@ async fn call_tool(st: &State, name: &str, args: &Value) -> (Output, bool) {
                 Output::Image { text, .. } => text.clone(),
             };
             let detail = if call.reveals() { "read".to_string() } else { summary };
-            st.host.record(call.tool(), &what, Outcome::Done, &detail);
+            log(st, started, call.tool(), &what, Outcome::Done, &detail);
             match out {
                 Output::Text(m) => text(crate::agents::clip_raw(&m, 20_000), false),
                 img => (img, false),
             }
         }
         Err(e) => {
-            st.host.record(call.tool(), &what, Outcome::Failed, &e);
+            log(st, started, call.tool(), &what, Outcome::Failed, &e);
             text(format!("Failed: {e}"), true)
         }
     }

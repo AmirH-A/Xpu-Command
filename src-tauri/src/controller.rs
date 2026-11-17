@@ -56,8 +56,6 @@ struct Heard {
 const AGENT_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 /// "Make that shorter" edits the last dictation if it was typed within this time.
 const EDIT_WINDOW: Duration = Duration::from_secs(10 * 60);
-/// A Mac request is short: open, play, remind. Anything longer is stuck.
-const MAC_TIMEOUT: Duration = Duration::from_secs(300);
 /// A follow-up within this time continues the agent's conversation; later ones start fresh.
 const SESSION_IDLE: Duration = Duration::from_secs(30 * 60);
 /// Below this peak level the microphone delivered silence (often: access denied, so macOS feeds zeros).
@@ -160,6 +158,11 @@ impl crate::mac::server::Host for MacHost {
     fn plan(&self, plan: &crate::mac::plan::Plan) {
         *self.step.lock() = Some(plan.progress());
         self.ctl.overlay(&self.app, Phase::Working, plan.current(), Some(&self.label()));
+    }
+    fn traced(&self, tool: &str, outcome: crate::mac::server::Outcome, ms: u64, detail: &str) {
+        if let Some(t) = self.ctl.trace.lock().as_mut() {
+            t.step(tool, outcome, ms, detail);
+        }
     }
     fn grant(&self, question: &str) -> tokio::sync::oneshot::Receiver<crate::agents::approvals::Answer> {
         let hint = tr("Say “always” to stop asking, “yes” for now, or press").to_string();
@@ -319,6 +322,8 @@ pub struct Controller {
     timing: Mutex<Option<Timing>>,
     /// The last dictation typed, for spoken edits ("scratch that", "make that shorter").
     typed: Mutex<Option<inject::Typed>>,
+    /// The trace of the request being handled.
+    trace: Mutex<Option<crate::trace::Builder>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -343,6 +348,7 @@ impl Controller {
             tray_live: std::sync::atomic::AtomicBool::new(false),
             timing: Mutex::new(None),
             typed: Mutex::new(None),
+            trace: Mutex::new(None),
         }
     }
 
@@ -590,6 +596,14 @@ impl Controller {
         });
     }
 
+    /// Ends the request's trace and saves it (on this Mac only).
+    fn end_trace(&self, ok: bool, result: &str) {
+        if let Some(b) = self.trace.lock().take() {
+            let t = b.finish(ok, result);
+            std::thread::spawn(move || crate::trace::save(&t));
+        }
+    }
+
     fn record_timing(&self, what: &str) {
         let Some(t) = self.timing.lock().take() else { return };
         let total = t.ended.elapsed().as_millis();
@@ -744,8 +758,18 @@ impl Controller {
                 None => {}
             }
         }
+        let (started, stt) = (*self.timing.lock()).map_or((Instant::now(), None), |t| (t.ended, Some(t.text_ms as u64)));
+        let route = match s.delivery {
+            Delivery::TypeIntoFocused => crate::trace::Route::Typed,
+            Delivery::Agent => crate::trace::Route::Agent,
+            Delivery::ControlMac => crate::trace::Route::Assistant,
+        };
+        *self.trace.lock() = Some(crate::trace::Builder::new(&text, route, started, stt));
         if matches!(s.delivery, Delivery::Agent | Delivery::ControlMac) {
             if let Some(r) = crate::routines::match_spoken(&text, &crate::routines::list()).cloned() {
+                if let Some(t) = self.trace.lock().as_mut() {
+                    t.route(crate::trace::Route::Routine);
+                }
                 return self.run_routine(app, s, r).await;
             }
         }
@@ -787,6 +811,7 @@ impl Controller {
             _ => None,
         };
         self.record_timing("Typed");
+        self.end_trace(true, "Typed");
         self.hide_later(app, Duration::from_millis(700));
         Ok(())
     }
@@ -806,6 +831,10 @@ impl Controller {
         crate::activity::record("dictation", if new.is_empty() { "Removed the last dictation" } else { "Rewrote the last dictation" }, crate::mac::server::Outcome::Done, "");
         *self.typed.lock() = (!new.is_empty()).then(|| inject::Typed { text: new.clone(), pid: last.pid, at: Instant::now() });
         self.record_timing("Edit");
+        if let Some(t) = self.trace.lock().as_mut() {
+            t.route(crate::trace::Route::Edit);
+        }
+        self.end_trace(true, if new.is_empty() { "Removed" } else { "Rewrote" });
         if new.is_empty() {
             self.overlay(app, Phase::Done, tr("Removed it"), Some(tr("Dictation")));
             self.hide_later(app, Duration::from_millis(1200));
@@ -970,12 +999,13 @@ impl Controller {
         self.overlay(app, Phase::Working, &trf("Routine: {name}", &[("name", &r.name)]), Some(tr("Routine")));
         let (done, stopped) = crate::mac::server::run_steps(host, exec, policy, Default::default(), &steps).await;
         crate::frame::hide(app);
-        let said = match stopped {
+        let said = match &stopped {
             None if done.len() == 1 => trf("Ran {name}: 1 step", &[("name", &r.name)]),
             None => trf("Ran {name}: {count} steps", &[("name", &r.name), ("count", &done.len().to_string())]),
-            Some(why) => trf("Stopped {name} after {done} of {total} steps: {why}", &[("name", &r.name), ("done", &done.len().to_string()), ("total", &steps.len().to_string()), ("why", &crate::agents::clip(&why, 120))]),
+            Some(why) => trf("Stopped {name} after {done} of {total} steps: {why}", &[("name", &r.name), ("done", &done.len().to_string()), ("total", &steps.len().to_string()), ("why", &crate::agents::clip(why, 120))]),
         };
         self.record_timing("Routine");
+        self.end_trace(stopped.is_none(), &said);
         self.overlay(app, Phase::Done, &said, Some(tr("Routine")));
         if s.speak_summary {
             speech::speak(said);
@@ -1011,6 +1041,10 @@ impl Controller {
             (None, Some(said)) => {
                 log::info!("instant command in {} ms", started.elapsed().as_millis());
                 self.record_timing("Instant command");
+                if let Some(t) = self.trace.lock().as_mut() {
+                    t.route(crate::trace::Route::Instant);
+                }
+                self.end_trace(true, said);
                 self.overlay(app, Phase::Done, said, Some("Mac"));
                 if s.speak_summary {
                     speech::speak(said.clone());
@@ -1019,6 +1053,10 @@ impl Controller {
                 true
             }
             (Some(why), _) if why.contains("cancelled") || why.contains("did not") => {
+                if let Some(t) = self.trace.lock().as_mut() {
+                    t.route(crate::trace::Route::Instant);
+                }
+                self.end_trace(true, "Cancelled");
                 self.overlay(app, Phase::Done, tr("Cancelled"), Some("Mac"));
                 self.hide_later(app, Duration::from_millis(1500));
                 true
@@ -1070,50 +1108,27 @@ impl Controller {
             slot.as_ref().map(|x| x.id.clone())
         };
         let host = MacHost::new(self, app, s.speak_summary);
-        let policy = s.mac_policy();
-        let context = if s.share_context {
-            let p = policy.clone();
-            tokio::task::spawn_blocking(move || crate::mac::ui::context(&p)).await.ok().flatten()
-        } else {
-            None
-        };
-        if let Some(c) = &context {
-            crate::activity::record("context", &c.summary(), crate::mac::server::Outcome::Done, "");
+        let started = crate::mac::pipeline::start(
+            host,
+            crate::mac::pipeline::Options {
+                text: text.to_string(),
+                policy: s.mac_policy(),
+                share_context: s.share_context,
+                memory: s.memory,
+                model: s.mac_model,
+                language: s.language.clone(),
+                profile: s.claude_profile.as_deref().map(crate::settings::claude_profile_dir).transpose()?,
+                resume: resume.clone(),
+                limits: Default::default(),
+            },
+        )
+        .await?;
+        if let Some(t) = self.trace.lock().as_mut() {
+            t.route(crate::trace::Route::Assistant);
+            t.model(crate::mac::model_name(started.model));
         }
-        let seen: Vec<String> = context.iter().filter(|c| c.selection.is_some()).map(|c| c.bundle.clone()).collect();
-        let named = {
-            let (t, front) = (text.to_string(), context.as_ref().map(|c| (c.bundle.clone(), c.app.clone())));
-            tokio::task::spawn_blocking(move || consented(&t, front)).await.unwrap_or_default()
-        };
-        if !named.is_empty() {
-            let names: Vec<&str> = named.iter().map(|(_, n)| n.as_str()).collect();
-            crate::activity::record("consent", &format!("Allowed for this request because you asked: {}", names.join(", ")), crate::mac::server::Outcome::Done, "");
-        }
-        let named: Vec<String> = named.into_iter().map(|(b, _)| b).collect();
-        let exec = Arc::new(crate::mac::exec::MacExec::new(policy.clone(), workspace.clone()).with_memory(s.memory));
-        let server = crate::mac::server::start(host, exec, policy, Default::default(), seen, named).await?;
-        let config = crate::mac::McpConfigFile::create(&crate::settings::config_dir()?, &server.mcp_config())?;
-        let memory = if s.memory { crate::memory::prompt_block(&crate::memory::list()) } else { String::new() };
-        let lang = speech::language_of(text, &s.language).unwrap_or("en");
-        let prompt = crate::mac::system_prompt(chrono::Local::now(), &memory, lang);
-        let model = crate::mac::pick_model(s.mac_model, text, context.as_ref().is_some_and(|c| c.selection.is_some()));
-        if s.mac_model == crate::settings::MacModel::Auto {
-            crate::activity::record("model", &format!("Chose {} for this request", crate::mac::model_label(model)), crate::mac::server::Outcome::Done, "automatic");
-        }
-        let profile = s.claude_profile.as_deref().map(crate::settings::claude_profile_dir).transpose()?;
-        let full = crate::mac::with_context(text, context.as_ref());
-        let run = agents::start(agents::Request {
-            kind: crate::settings::AgentKind::Claude,
-            prompt: &full,
-            project: &workspace,
-            safety: crate::settings::Safety::ReadOnly,
-            resume: resume.as_deref(),
-            timeout: MAC_TIMEOUT,
-            claude_config_dir: profile.as_deref(),
-            mac: Some(agents::MacArgs { mcp_config: config.path(), model: crate::mac::model_name(model), system_prompt: &prompt }),
-            approvals: None,
-            custom_bin: None,
-        })?;
+        let run = started.run;
+        let (server, config) = started.keep;
         let f = Follow { name: "Mac".into(), project: workspace, continuing: resume.is_some(), speak: s.speak_summary, agent: crate::settings::AgentKind::Claude, profile: s.claude_profile.clone() };
         self.follow(app, run, f, text, (server, config));
         Ok(())
@@ -1144,6 +1159,7 @@ impl Controller {
                     agents::AgentEvent::Status { text } => this.overlay(&app, Phase::Working, &text, Some(&name)),
                     agents::AgentEvent::Done { summary } => {
                         this.record_timing(&name);
+                        this.end_trace(true, &summary);
                         if let Some(x) = this.session.lock().as_mut() {
                             x.at = Instant::now();
                         }
@@ -1163,6 +1179,7 @@ impl Controller {
                         break;
                     }
                     agents::AgentEvent::Failed { error } => {
+                        this.end_trace(error == "stopped", &error);
                         if continuing && error != "stopped" {
                             this.session.lock().take();
                         }
@@ -1187,6 +1204,7 @@ impl Controller {
 
     fn fail(self: &Arc<Self>, app: &AppHandle, e: Error) {
         log::warn!("{e}");
+        self.end_trace(false, &e.to_string());
         if matches!(e, Error::Permission(_)) {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
@@ -1225,38 +1243,6 @@ impl Controller {
             }
         });
     }
-}
-
-/// The apps (bundle id, name) the request itself asks for: named installed or running apps, the
-/// app in front when it says "this", and the user's files when it mentions one.
-#[cfg(target_os = "macos")]
-fn consented(text: &str, front: Option<(String, String)>) -> Vec<(String, String)> {
-    use crate::mac::consent;
-    let mut out: Vec<(String, String)> = Vec::new();
-    let mut add = |b: String, n: String| {
-        if !out.iter().any(|(x, _)| *x == b) {
-            out.push((b, n));
-        }
-    };
-    let running = crate::mac::ui::apps_on_screen();
-    for name in consent::mentioned(text, running.iter().map(|a| a.name.as_str())) {
-        if let Some(a) = running.iter().find(|a| a.name == name) {
-            add(a.bundle.clone(), a.name.clone());
-        }
-    }
-    let installed = crate::mac::apps::installed();
-    for name in consent::mentioned(text, installed.iter().map(|a| a.name.as_str())) {
-        if let Some((bundle, shown)) = installed.iter().find(|a| a.name == name).and_then(|a| crate::mac::ui::bundle_info(&a.path)) {
-            add(bundle, shown);
-        }
-    }
-    if let Some((bundle, name)) = front.filter(|_| consent::points_at_front(text)) {
-        add(bundle, name);
-    }
-    if consent::mentions_files(text) {
-        add(crate::mac::policy::FILES.to_string(), "Your files".to_string());
-    }
-    out
 }
 
 /// The app in front (its process and bundle id), where a dictation will be typed.

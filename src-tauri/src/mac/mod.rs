@@ -9,6 +9,8 @@ pub mod ax;
 pub mod exec;
 #[cfg(target_os = "macos")]
 pub mod files;
+#[cfg(target_os = "macos")]
+pub mod pipeline;
 pub mod plan;
 pub mod policy;
 pub mod quick;
