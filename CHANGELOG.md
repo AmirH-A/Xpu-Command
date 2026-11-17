@@ -2,7 +2,7 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
-## Unreleased
+## 0.9.2 (2026-11-17)
 
 ### Added
 - **Health › How it's doing.** Success and typical speed of your last 100 Control my Mac requests, against the goals (90% of requests work; one step in about 3 s; several steps in about 8 s). Each request's steps and times are kept on your Mac only.
