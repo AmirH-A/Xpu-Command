@@ -63,9 +63,11 @@ pub enum Delivery {
 }
 
 /// The Claude model for "Control my Mac": Haiku is fast; Sonnet handles longer requests better.
+/// Auto picks per request: Haiku for short one-step requests, Sonnet for work inside apps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MacModel {
+    Auto,
     Haiku,
     Sonnet,
 }
@@ -173,7 +175,7 @@ impl Default for Settings {
             max_record_seconds: 120,
             input_device: None,
             claude_profile: None,
-            mac_model: MacModel::Sonnet,
+            mac_model: MacModel::Auto,
             app_access: Default::default(),
             allow_all_apps: false,
             step_by_step: false,

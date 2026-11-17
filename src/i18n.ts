@@ -61,6 +61,8 @@ const EN = [
   "Each request also sends the front app, and for apps the assistant may see, the window title, page address and selected text.",
   "Your files",
   "Find, read, open, move, rename and trash files in your home folder (never hidden folders or Library).",
+  "Automatic",
+  "Automatic uses Haiku for quick requests and Sonnet inside apps.",
 ] as const;
 
 type Same<T extends readonly unknown[]> = { readonly [K in keyof T]: string };
@@ -117,6 +119,8 @@ const FA: Tr = [
   "هر درخواست نام برنامهٔ جلو را هم می‌فرستد، و برای برنامه‌هایی که دستیار اجازهٔ دیدنشان را دارد، عنوان پنجره، نشانی صفحه و متن انتخاب‌شده را.",
   "فایل‌های شما",
   "پیدا کردن، خواندن، باز کردن، جابه‌جا کردن، تغییر نام و انداختن فایل‌ها در سطل زباله، در پوشهٔ خانه (هرگز پوشه‌های پنهان یا Library).",
+  "خودکار",
+  "حالت خودکار برای درخواست‌های سریع Haiku و برای کار داخل برنامه‌ها Sonnet را انتخاب می‌کند.",
 ];
 
 const ES: Tr = [
@@ -170,6 +174,8 @@ const ES: Tr = [
   "Cada petición envía también la app en primer plano y, en las apps que el asistente puede ver, el título de la ventana, la dirección de la página y el texto seleccionado.",
   "Tus archivos",
   "Buscar, leer, abrir, mover, renombrar y enviar a la papelera archivos de tu carpeta de inicio (nunca carpetas ocultas ni Library).",
+  "Automático",
+  "Automático usa Haiku para peticiones rápidas y Sonnet dentro de las apps.",
 ];
 
 const DE: Tr = [
@@ -223,6 +229,8 @@ const DE: Tr = [
   "Jede Anfrage sendet auch die App im Vordergrund und, bei Apps, die der Assistent sehen darf, den Fenstertitel, die Seitenadresse und den markierten Text.",
   "Deine Dateien",
   "Dateien in deinem Benutzerordner finden, lesen, öffnen, verschieben, umbenennen und in den Papierkorb legen (nie versteckte Ordner oder Library).",
+  "Automatisch",
+  "Automatisch nutzt Haiku für schnelle Anfragen und Sonnet innerhalb von Apps.",
 ];
 
 const FR: Tr = [
@@ -276,6 +284,8 @@ const FR: Tr = [
   "Chaque demande envoie aussi l’app au premier plan et, pour les apps que l’assistant peut voir, le titre de la fenêtre, l’adresse de la page et le texte sélectionné.",
   "Vos fichiers",
   "Trouver, lire, ouvrir, déplacer, renommer et mettre à la corbeille les fichiers de votre dossier personnel (jamais les dossiers cachés ni Library).",
+  "Automatique",
+  "Automatique utilise Haiku pour les demandes rapides et Sonnet dans les apps.",
 ];
 
 const AR: Tr = [
@@ -329,6 +339,8 @@ const AR: Tr = [
   "يرسل كل طلب أيضًا اسم التطبيق في الواجهة، وللتطبيقات التي يُسمح للمساعد برؤيتها: عنوان النافذة وعنوان الصفحة والنص المحدد.",
   "ملفاتك",
   "البحث عن الملفات في مجلد المنزل وقراءتها وفتحها ونقلها وإعادة تسميتها ونقلها إلى سلة المهملات (وليس المجلدات المخفية أو Library أبدًا).",
+  "تلقائي",
+  "الوضع التلقائي يستخدم Haiku للطلبات السريعة وSonnet داخل التطبيقات.",
 ];
 
 const ZH: Tr = [
@@ -382,6 +394,8 @@ const ZH: Tr = [
   "每个请求还会发送前台应用；对于允许助手查看的应用，还会发送窗口标题、网页地址和所选文字。",
   "你的文件",
   "在你的个人文件夹中查找、读取、打开、移动、重命名文件并移到废纸篓（绝不涉及隐藏文件夹或 Library）。",
+  "自动",
+  "自动模式：快速请求用 Haiku，在应用内操作用 Sonnet。",
 ];
 
 const JA: Tr = [
@@ -435,6 +449,8 @@ const JA: Tr = [
   "各リクエストで前面のアプリも送信します。アシスタントが見てよいアプリでは、ウインドウのタイトル、ページのアドレス、選択したテキストも送信します。",
   "あなたのファイル",
   "ホームフォルダ内のファイルを検索、読み取り、開く、移動、名前変更、ゴミ箱へ移動します（隠しフォルダやLibraryには触れません）。",
+  "自動",
+  "自動では、簡単な依頼に Haiku、アプリ内の操作に Sonnet を使います。",
 ];
 
 const TABLES: Record<Exclude<Lang, 'en'>, Tr> = { fa: FA, es: ES, de: DE, fr: FR, ar: AR, zh: ZH, ja: JA };

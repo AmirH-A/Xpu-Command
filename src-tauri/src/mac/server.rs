@@ -46,6 +46,8 @@ pub trait Host: Send + Sync + 'static {
     fn record(&self, tool: &str, summary: &str, outcome: Outcome, detail: &str);
     /// Outline the window being worked on (screen points), or remove the outline.
     fn highlight(&self, frame: Option<(f64, f64, f64, f64)>);
+    /// Shows the assistant's plan and the step it is on.
+    fn plan(&self, _plan: &super::plan::Plan) {}
     /// Asks a coding agent's permission question (show, speak, listen). The receiver yields the
     /// answer and how it was given. The default answers nothing (= deny).
     fn approval(&self, _q: &crate::agents::approvals::Question) -> oneshot::Receiver<(crate::agents::approvals::Answer, Via)> {
@@ -262,7 +264,13 @@ async fn handle(st: Arc<State>, req: Request<Incoming>) -> Result<Response<Full<
         }
         "ping" => json!({}),
         "tools/list" => match st.tools {
-            Toolset::Mac { .. } => json!({ "tools": tools::schemas() }),
+            Toolset::Mac { .. } => {
+                let mut list = tools::schemas();
+                if let Some(a) = list.as_array_mut() {
+                    a.push(super::plan::schema());
+                }
+                json!({ "tools": list })
+            }
             Toolset::Approvals { .. } => json!({ "tools": crate::agents::approvals::schema() }),
         },
         "tools/call" if matches!(st.tools, Toolset::Approvals { .. }) => {
@@ -273,7 +281,7 @@ async fn handle(st: Arc<State>, req: Request<Incoming>) -> Result<Response<Full<
         "tools/call" => {
             let name = params.get("name").and_then(Value::as_str).unwrap_or("");
             let args = params.get("arguments").cloned().unwrap_or(Value::Null);
-            let (out, is_error) = call_tool(&st, name, &args).await;
+            let (out, is_error) = if name == super::plan::TOOL { show_plan(&st, &args) } else { call_tool(&st, name, &args).await };
             let content = match out {
                 Output::Text(t) => json!([{ "type": "text", "text": t }]),
                 Output::Image { text, jpeg } => json!([
@@ -327,6 +335,20 @@ async fn approval_call(st: &State, name: &str, args: &Value) -> Value {
     };
     st.host.record("approve", &q.what, outcome, detail);
     approvals::response(answer, &input, reason)
+}
+
+/// The plan is shown, never gated or counted: it runs nothing.
+fn show_plan(st: &State, args: &Value) -> (Output, bool) {
+    match super::plan::parse(args) {
+        Ok(p) => {
+            if p.now == 1 {
+                st.host.record(super::plan::TOOL, &p.summary(), Outcome::Done, "");
+            }
+            st.host.plan(&p);
+            text("Shown to the user.", false)
+        }
+        Err(e) => text(format!("Refused: {e}"), true),
+    }
 }
 
 /// Text to the model; `is_error`.
@@ -512,6 +534,9 @@ mod tests {
         fn highlight(&self, f: Option<(f64, f64, f64, f64)>) {
             self.log.lock().push(format!("highlight {}", f.is_some()));
         }
+        fn plan(&self, p: &crate::mac::plan::Plan) {
+            self.log.lock().push(format!("plan {} {}", p.progress(), p.current()));
+        }
         fn approval(&self, q: &crate::agents::approvals::Question) -> oneshot::Receiver<(crate::agents::approvals::Answer, Via)> {
             self.log.lock().push(format!("approval {}", q.what));
             let (tx, rx) = oneshot::channel();
@@ -612,7 +637,9 @@ mod tests {
         let (c, _) = post(&s, json!({"jsonrpc":"2.0","method":"notifications/initialized"})).await;
         assert_eq!(c, 202);
         let (_, v) = post(&s, json!({"jsonrpc":"2.0","id":2,"method":"tools/list"})).await;
-        assert_eq!(v["result"]["tools"].as_array().unwrap().len(), 41);
+        let tools = v["result"]["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 42);
+        assert!(tools.iter().any(|t| t["name"] == "plan"));
         let (_, v) = post(&s, json!({"jsonrpc":"2.0","id":3,"method":"resources/list"})).await;
         assert_eq!(v["error"]["code"], -32601);
     }
@@ -647,6 +674,22 @@ mod tests {
         assert_eq!(*exec.0.lock(), ["open_app", "open_app"]);
         let log = host.log.lock().join("\n");
         assert!(log.contains("record open_url Refused") && log.contains("record open_app Failed"), "{log}");
+    }
+
+    #[tokio::test]
+    async fn the_plan_is_shown_but_never_gated_or_counted() {
+        let (s, host, exec) = serve(None).await;
+        for now in 1..=8 {
+            let (t, err) = call(&s, "plan", json!({"steps":["Open Mail","Reply"],"now": now.min(2)})).await;
+            assert_eq!((t.as_str(), err), ("Shown to the user.", false));
+        }
+        let (t, err) = call(&s, "plan", json!({"steps":[]})).await;
+        assert!(err && t.starts_with("Refused"), "{t}");
+        assert_eq!(call(&s, "open_app", json!({"name":"Safari"})).await, ("ok".into(), false), "plan calls don't use up the action limit");
+        assert_eq!(*exec.0.lock(), ["open_app"]);
+        let log = host.log.lock().join("\n");
+        assert!(log.contains("plan 1/2 Open Mail") && log.contains("plan 2/2 Reply"), "{log}");
+        assert_eq!(log.matches("record plan Done").count(), 1, "the plan is logged once, when it starts");
     }
 
     #[tokio::test]

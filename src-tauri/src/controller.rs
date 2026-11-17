@@ -131,11 +131,30 @@ struct MacHost {
     ctl: Arc<Controller>,
     app: AppHandle,
     speak: bool,
+    /// The plan's progress ("2/3") once the assistant has shown one.
+    step: Mutex<Option<String>>,
+}
+
+impl MacHost {
+    fn new(ctl: &Arc<Controller>, app: &AppHandle, speak: bool) -> Arc<Self> {
+        Arc::new(Self { ctl: ctl.clone(), app: app.clone(), speak, step: Mutex::new(None) })
+    }
+
+    fn label(&self) -> String {
+        match self.step.lock().as_deref() {
+            Some(p) => format!("Mac · {p}"),
+            None => "Mac".into(),
+        }
+    }
 }
 
 impl crate::mac::server::Host for MacHost {
     fn status(&self, text: &str) {
-        self.ctl.overlay(&self.app, Phase::Working, text, Some("Mac"));
+        self.ctl.overlay(&self.app, Phase::Working, text, Some(&self.label()));
+    }
+    fn plan(&self, plan: &crate::mac::plan::Plan) {
+        *self.step.lock() = Some(plan.progress());
+        self.ctl.overlay(&self.app, Phase::Working, plan.current(), Some(&self.label()));
     }
     fn ask(&self, ask: crate::mac::server::Ask, text: &str) -> tokio::sync::oneshot::Receiver<()> {
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -779,7 +798,7 @@ impl Controller {
             return Err(msg("still working on the last request; say \"stop\" to stop it"));
         }
         let workspace = crate::mac::workspace()?;
-        let host = Arc::new(MacHost { ctl: self.clone(), app: app.clone(), speak: s.speak_summary });
+        let host = MacHost::new(self, app, s.speak_summary);
         let policy = s.mac_policy();
         let exec = Arc::new(crate::mac::exec::MacExec::new(policy.clone(), workspace).with_memory(s.memory).without_learning());
         let steps: Vec<(String, serde_json::Value)> = r.steps.iter().map(|st| (st.tool.clone(), st.args.clone())).collect();
@@ -817,7 +836,7 @@ impl Controller {
         }
         let started = Instant::now();
         let Ok(workspace) = crate::mac::workspace() else { return false };
-        let host = Arc::new(MacHost { ctl: self.clone(), app: app.clone(), speak: s.speak_summary });
+        let host = MacHost::new(self, app, s.speak_summary);
         let policy = s.mac_policy();
         let exec = Arc::new(crate::mac::exec::MacExec::new(policy.clone(), workspace).with_memory(s.memory));
         let (done, stopped) = crate::mac::server::run_steps(host, exec, policy, Default::default(), &steps).await;
@@ -884,7 +903,7 @@ impl Controller {
             }
             slot.as_ref().map(|x| x.id.clone())
         };
-        let host = Arc::new(MacHost { ctl: self.clone(), app: app.clone(), speak: s.speak_summary });
+        let host = MacHost::new(self, app, s.speak_summary);
         let policy = s.mac_policy();
         let context = if s.share_context {
             let p = policy.clone();
@@ -902,6 +921,10 @@ impl Controller {
         let memory = if s.memory { crate::memory::prompt_block(&crate::memory::list()) } else { String::new() };
         let lang = speech::language_of(text, &s.language).unwrap_or("en");
         let prompt = crate::mac::system_prompt(chrono::Local::now(), &memory, lang);
+        let model = crate::mac::pick_model(s.mac_model, text, context.as_ref().is_some_and(|c| c.selection.is_some()));
+        if s.mac_model == crate::settings::MacModel::Auto {
+            crate::activity::record("model", &format!("Chose {} for this request", crate::mac::model_label(model)), crate::mac::server::Outcome::Done, "automatic");
+        }
         let profile = s.claude_profile.as_deref().map(crate::settings::claude_profile_dir).transpose()?;
         let full = crate::mac::with_context(text, context.as_ref());
         let run = agents::start(agents::Request {
@@ -912,7 +935,7 @@ impl Controller {
             resume: resume.as_deref(),
             timeout: MAC_TIMEOUT,
             claude_config_dir: profile.as_deref(),
-            mac: Some(agents::MacArgs { mcp_config: config.path(), model: crate::mac::model_name(s.mac_model), system_prompt: &prompt }),
+            mac: Some(agents::MacArgs { mcp_config: config.path(), model: crate::mac::model_name(model), system_prompt: &prompt }),
             approvals: None,
             custom_bin: None,
         })?;
