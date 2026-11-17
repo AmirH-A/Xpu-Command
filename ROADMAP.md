@@ -12,14 +12,15 @@ The same rules hold for everything below: every app and your files start Off, ri
 | **Understands "this"** | Your selected text and the page you're on come with your request | 0.8 |
 | **Right-click, drag, copy and wait** | Uses the mouse and clipboard like you do, and waits for pages to load | 0.8 |
 | **Your files** | Find (Spotlight), read (text, PDF, Word), open, move, rename, Trash and new folders in your home folder; all undoable; never hidden folders, Library, apps or scripts | Next update |
+| **Polished dictation** | Removes fillers, fixes punctuation and fits the app you're in (chat, email, code); "make that shorter", "more polite", "in Spanish", "scratch that" edit what you just said | Next update |
+| **Shows its plan and checks its work** | Multi-step requests show their steps in the pill; each action in a window or page is checked and retried another way once; the model is chosen automatically | Next update |
+| **"Hey Xpu"** | An optional wake phrase detected on your Mac, so no button is needed | Next update |
+| **Every message in 8 languages** | Pill hints, steps, results, errors and spoken questions | Next update |
 
 ## Next (planned)
 
 1. **Signed by Apple, updates itself.** Developer ID signing, notarization and in-app updates: no security warning on install, and Accessibility stays allowed across updates. This is the biggest source of friction today.
-2. **Polished dictation.** Removes fillers, fixes punctuation and formats for the app you're in (email, chat, code); edit by voice: "make that shorter", "more polite", "in Spanish".
-3. **Shows its plan and checks its work.** Each step appears in the pill; after acting, it verifies the result and tries another way when something fails. Sonnet is chosen automatically for work inside apps.
-4. **"Hey Xpu".** An optional wake phrase detected on your Mac, so no button is needed.
-5. **Offline Persian voice**, and every message (pill hints, results, errors) in all 8 languages.
+2. **Offline Persian voice.** Persian answers spoken by an on-device voice (macOS has none today, so they are shown, not spoken).
 
 ## Later (exploring)
 

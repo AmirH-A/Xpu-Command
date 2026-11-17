@@ -7,6 +7,12 @@ All notable changes to Xpu Command. Downloads are on the [releases page](https:/
 ### Added
 - **Your files.** Control my Mac finds files by name (Spotlight, plus files made moments ago), reads documents (text, PDF, Word, RTF, HTML), opens files and folders, moves, renames, makes folders and moves things to the Trash. Every change can be undone; nothing is ever replaced. Files start Off: allow **Your files** at the top of Settings › Apps (See to find and read, Control to change), or say yes when asked. Hidden folders, Library, apps, installers and scripts are never touched, and the Trash always needs your yes.
 - [Roadmap](ROADMAP.md), also on the website.
+- **Polished dictation.** Type mode removes "um"s and stutters, fixes punctuation spacing and capitals, and fits the app you're in: a chat message loses its final period, a terminal or code editor gets your words as said. A second dictation in the same field gets a space before it. Turn it off with **Polish my dictation** in Mode.
+- **Edit by voice.** Right after dictating, say "make that shorter", "more polite", "more formal", "fix the grammar", "in Spanish" or "scratch that" (also in the other seven languages). The text is rewritten by Claude Haiku with no tools and replaced in place; Xpu Command first checks it is still in the field, so nothing else is touched.
+- **Shows its plan and checks its work.** For requests with several steps, Control my Mac shows its plan in the pill ("Mac · 2/3") and in Activity. After clicking, typing or filling a form it checks the result, tries one other way if it didn't work, and otherwise says plainly what failed.
+- **Automatic model** (new default): Haiku for quick one-step requests, Sonnet for work inside apps, on-screen context and longer requests. Activity shows which was used.
+- **"Hey Xpu".** Optional, off by default: say "Hey Xpu", then your request, or both in one breath. Checked on your Mac with the speech model you already have; audio is kept for a few seconds in memory only and never leaves the Mac. Paused while Xpu Command listens, asks or speaks. macOS shows the microphone indicator while it's on.
+- **Every message in your language.** The pill (hints, steps, results, errors) and the spoken questions follow the app language in Settings, in all 8 languages, with right-to-left text for Persian and Arabic.
 
 ### Fixed
 - Searches with many results no longer fail.
