@@ -138,8 +138,24 @@ pub fn find_app(spoken: &str) -> Result<RunningApp, String> {
     match super::apps::pick(&on_screen, |a| &a.name, spoken) {
         Ok(hit) => Ok(hit.clone()),
         Err(Some(e)) => Err(e),
-        Err(None) => Err(format!("\"{spoken}\" has no window open. Open it with open_app first.")),
+        Err(None) => open_window_of(spoken).ok_or_else(|| format!("\"{spoken}\" has no window open. Open it with open_app first.")),
     }
+}
+
+/// An installed app with no window on screen (not running, hidden, or all windows closed): opens
+/// it (LaunchServices also reopens a window for a running app) and waits for its window. Never for
+/// apps the assistant may not touch or terminals.
+fn open_window_of(spoken: &str) -> Option<RunningApp> {
+    let installed = super::apps::installed();
+    let app = super::apps::find(&installed, spoken).ok()?;
+    let (bundle, _) = bundle_info(&app.path)?;
+    if super::policy::class(&bundle) != super::policy::Class::Normal {
+        return None;
+    }
+    super::exec::run_program("/usr/bin/open", &["-b".as_ref(), bundle.as_ref()], Duration::from_secs(10)).ok()?;
+    let found = wait_for_window(&bundle, Duration::from_secs(5))?;
+    std::thread::sleep(Duration::from_millis(300));
+    Some(found)
 }
 
 /// The app's main window: focused, else main, else the first one.
@@ -156,21 +172,69 @@ pub fn window_frame(pid: i32) -> Option<(f64, f64, f64, f64)> {
     main_window(pid).and_then(|w| w.frame())
 }
 
-/// Brings the app to the front (via LaunchServices) and waits until it has keyboard focus.
-pub fn activate(app: &RunningApp) -> Result<(), String> {
-    if front_pid() == Some(app.pid) {
-        return Ok(());
+/// Whether the app (any of its processes) is in front.
+pub fn is_front(bundle: &str, pid: i32) -> bool {
+    match front_pid() {
+        Some(p) if p == pid => true,
+        Some(p) => app_of_pid(p).is_some_and(|a| a.bundle == bundle),
+        None => false,
     }
-    super::exec::run_program("/usr/bin/open", &["-b".as_ref(), app.bundle.as_ref()], Duration::from_secs(10))?;
+}
+
+fn wait_front(bundle: &str, pid: i32, wait: Duration) -> bool {
     let start = Instant::now();
-    while start.elapsed() < Duration::from_millis(2500) {
-        if front_pid() == Some(app.pid) {
-            std::thread::sleep(Duration::from_millis(120));
-            return Ok(());
+    while start.elapsed() < wait {
+        if is_front(bundle, pid) {
+            return true;
         }
         std::thread::sleep(Duration::from_millis(50));
     }
+    false
+}
+
+/// Brings the app to the front and waits until it really is. Since macOS 14, an app asked to come
+/// forward by a background process may stay behind, so this asks through Accessibility first
+/// (AXFrontmost, which macOS honors), then LaunchServices, then raises the window and asks again.
+pub fn activate(app: &RunningApp) -> Result<(), String> {
+    if is_front(&app.bundle, app.pid) {
+        return Ok(());
+    }
+    let el = El::app(app.pid);
+    let _ = el.set_bool("AXHidden", false);
+    let _ = el.set_bool("AXFrontmost", true);
+    if wait_front(&app.bundle, app.pid, Duration::from_millis(1200)) {
+        std::thread::sleep(Duration::from_millis(100));
+        return Ok(());
+    }
+    super::exec::run_program("/usr/bin/open", &["-b".as_ref(), app.bundle.as_ref()], Duration::from_secs(10))?;
+    if wait_front(&app.bundle, app.pid, Duration::from_millis(1500)) {
+        std::thread::sleep(Duration::from_millis(100));
+        return Ok(());
+    }
+    if let Some(w) = main_window(app.pid) {
+        let _ = w.perform("AXRaise");
+        let _ = w.set_bool("AXMain", true);
+    }
+    let _ = el.set_bool("AXFrontmost", true);
+    if wait_front(&app.bundle, app.pid, Duration::from_millis(1200)) {
+        std::thread::sleep(Duration::from_millis(100));
+        return Ok(());
+    }
     Err(format!("{} didn't come to the front", app.name))
+}
+
+/// The running app with this bundle id that has a window on screen, waiting up to `wait` for one.
+pub fn wait_for_window(bundle: &str, wait: Duration) -> Option<RunningApp> {
+    let start = Instant::now();
+    loop {
+        if let Some(a) = apps_on_screen().into_iter().find(|a| a.bundle == bundle) {
+            return Some(a);
+        }
+        if start.elapsed() >= wait {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
 }
 
 
@@ -358,10 +422,11 @@ impl Session {
         let actions = el.actions();
         let done = |verb: &str| Ok(format!("{verb} {label}"));
         match kind {
-            ClickKind::Left if actions.iter().any(|a| a == "AXPress") => {
-                el.perform("AXPress")?;
-                return done("Clicked");
-            }
+            ClickKind::Left if actions.iter().any(|a| a == "AXPress") => match el.perform("AXPress") {
+                Ok(()) => return done("Clicked"),
+                // Some controls (often in Electron apps) list AXPress but refuse it: click instead.
+                Err(e) => log::info!("AXPress refused for {label}: {e}; clicking instead"),
+            },
             ClickKind::Right if el.frame().is_none() && actions.iter().any(|a| a == "AXShowMenu") => {
                 match el.perform("AXShowMenu") {
                     Err(e) if !e.contains("in time") => return Err(e),
@@ -370,8 +435,10 @@ impl Session {
             }
             _ => {}
         }
-        let (x, y, w, h) = el.frame().ok_or("that control has no position")?;
         let app = app_of_pid(pid).ok_or("that app has quit")?;
+        let Some((x, y, w, h)) = el.frame().filter(|f| f.2 >= 1.0 && f.3 >= 1.0) else {
+            return press_without_position(&el, &app, &label, &actions, kind);
+        };
         activate(&app)?;
         mouse(&app, x + w / 2.0, y + h / 2.0, kind)?;
         if kind == ClickKind::Right {
@@ -602,6 +669,29 @@ pub fn screen_capture_allowed() -> bool {
 
 fn source() -> Result<CGEventSource, String> {
     CGEventSource::new(CGEventSourceStateID::HIDSystemState).map_err(|_| "could not create input events".to_string())
+}
+
+/// A control with no place on screen (common in Electron apps): its other actions, else focus it
+/// and press Space, as the keyboard would. Says plainly when nothing works, so the assistant tries
+/// another way (the menu bar or a shortcut).
+fn press_without_position(el: &El, app: &RunningApp, label: &str, actions: &[String], kind: ClickKind) -> Result<String, String> {
+    if kind == ClickKind::Left {
+        for a in ["AXConfirm", "AXPick", "AXOpen"] {
+            if actions.iter().any(|x| x == a) && el.perform(a).is_ok() {
+                return Ok(format!("Clicked {label}"));
+            }
+        }
+        if el.set_bool("AXFocused", true).is_ok() {
+            activate(app)?;
+            if crate::permissions::secure_input_active() {
+                return Err("a password field has the keyboard: not pressing keys".into());
+            }
+            let space = super::tools::keycode("space").ok_or("no Space key")?;
+            key(app.pid, space, CGEventFlags::CGEventFlagNull)?;
+            return Ok(format!("Focused {label} and pressed Space"));
+        }
+    }
+    Err(format!("{label} can't be clicked: it has no place on screen and refuses a press. Use the menu bar (choose_menu) or a keyboard shortcut instead"))
 }
 
 fn key(pid: i32, code: u16, flags: CGEventFlags) -> Result<(), String> {

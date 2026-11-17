@@ -213,7 +213,19 @@ impl Exec for MacExec {
             Call::ChooseMenu { app, path } => t(self.session.choose_menu(&self.same_app(app, target)?, path)?),
             Call::Scroll { app, down, amount } => t(self.session.scroll(&self.same_app(app, target)?, *down, *amount)?),
             Call::ClickAt { app, x, y, kind } => t(self.session.click_at(&self.same_app(app, target)?, *x, *y, *kind)?),
-            Call::ReadPage { app } => t(self.pages.read(&self.same_app(app, target)?)?),
+            Call::ReadPage { app } => {
+                let a = self.same_app(app, target)?;
+                match self.pages.read(&a) {
+                    Ok(page) => t(page),
+                    // Page access is off in this browser: read the window instead, so the request
+                    // goes on (with click and type_text), and pass on how to turn it on.
+                    Err(e) if e.contains("doesn't let Xpu Command work on pages") => {
+                        let window = self.session.read_window(&a)?;
+                        t(format!("{e}\nHere is the window instead (use click and type_text with these numbers):\n{window}"))
+                    }
+                    Err(e) => Err(e),
+                }
+            }
             Call::ClickPage { element, kind } => {
                 self.same_page(*element, target)?;
                 t(self.pages.click(*element, *kind)?)
@@ -277,7 +289,15 @@ fn run_action(call: &Call, request: u64) -> Result<String, String> {
                 if !was_running {
                     undo::push(request, format!("closed {}", app.name), Step::QuitApp { name: app.name.clone() });
                 }
-                Ok(format!("Opened {}", app.name))
+                // Report what really happened: open, with a window, in front.
+                let Some((bundle, _)) = ui::bundle_info(&app.path) else { return Ok(format!("Opened {}", app.name)) };
+                match ui::wait_for_window(&bundle, Duration::from_secs(6)) {
+                    Some(running) => match ui::activate(&running) {
+                        Ok(()) => Ok(format!("Opened {}; it is in front", app.name)),
+                        Err(_) => Ok(format!("Opened {}, but another app stayed in front; call open_app again or click in it", app.name)),
+                    },
+                    None => Ok(format!("Opened {}; it has no window yet (it may still be starting)", app.name)),
+                }
             }
             Call::QuitApp { name } => {
                 let all = apps::installed();
@@ -310,7 +330,16 @@ fn run_action(call: &Call, request: u64) -> Result<String, String> {
                     Player::Spotify => (MEDIA_SPOTIFY, "Spotify"),
                     Player::Music => (MEDIA_MUSIC, "Music"),
                 };
-                let now = osascript(script, &[a], app)?;
+                let now = match osascript(script, &[a], app) {
+                    Ok(now) => now,
+                    // Without Automation permission for the player, the media keys still work
+                    // (they go to whatever is playing) and need nothing more than Accessibility.
+                    Err(e) if e.contains("isn't allowed to control") => {
+                        media_key(*action)?;
+                        return Ok(format!("Pressed the {a} media key (Xpu Command can't ask {app} directly: {e})"));
+                    }
+                    Err(e) => return Err(e),
+                };
                 match action {
                     MediaAction::Play => undo::push(request, format!("paused {app}"), Step::Media { play: false, player: p }),
                     MediaAction::Pause => undo::push(request, format!("resumed {app}"), Step::Media { play: true, player: p }),
@@ -528,6 +557,27 @@ pub fn music_key(key: crate::airpods::MusicKey) -> Result<String, String> {
         return Err("no music app is running".into());
     };
     osascript(script, &[action], app)
+}
+
+/// Presses a media key (play/pause, next, previous) as the keyboard's media keys do. Run through
+/// JavaScript for Automation, which posts the event itself: no Apple events to other apps.
+fn media_key(action: MediaAction) -> Result<(), String> {
+    let code = match action {
+        MediaAction::Play | MediaAction::Pause => 16,
+        MediaAction::Next => 17,
+        MediaAction::Previous => 18,
+    };
+    const SCRIPT: &str = r#"ObjC.import('Cocoa'); ObjC.import('CoreGraphics');
+function run(argv) {
+  const code = parseInt(argv[0], 10);
+  for (const down of [true, false]) {
+    const flags = down ? 0xa00 : 0xb00;
+    const e = $.NSEvent.otherEventWithTypeLocationModifierFlagsTimestampWindowNumberContextSubtypeData1Data2(14, $.NSMakePoint(0, 0), flags, 0, 0, $(), 8, (code << 16) | flags, -1);
+    $.CGEventPost(0, e.CGEvent);
+  }
+  return "ok";
+}"#;
+    run_program(OSASCRIPT, &["-l".as_ref(), "JavaScript".as_ref(), "-e".as_ref(), SCRIPT.as_ref(), code.to_string().as_ref()], Duration::from_secs(10)).map(|_| ())
 }
 
 fn is_running(process: &str) -> bool {

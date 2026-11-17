@@ -9,6 +9,13 @@ pub struct App {
     pub path: PathBuf,
 }
 
+const SYSTEM_APPS: &[&str] = &[
+    "/System/Library/CoreServices/Finder.app",
+    "/System/Library/CoreServices/Applications/Screen Sharing.app",
+    "/System/Library/CoreServices/Applications/Archive Utility.app",
+    "/System/Library/CoreServices/Applications/About This Mac.app",
+];
+
 fn roots() -> Vec<PathBuf> {
     let mut v: Vec<PathBuf> = ["/Applications", "/Applications/Utilities", "/System/Applications", "/System/Applications/Utilities"].iter().map(PathBuf::from).collect();
     if let Some(h) = dirs::home_dir() {
@@ -22,6 +29,15 @@ pub fn installed() -> Vec<App> {
     let mut out: Vec<App> = Vec::new();
     for root in roots() {
         scan(&root, 1, &mut out);
+    }
+    // System apps that live outside the Applications folders.
+    for extra in SYSTEM_APPS {
+        let p = Path::new(extra);
+        if p.is_dir() {
+            if let Some(name) = p.file_stem().map(|n| n.to_string_lossy().to_string()) {
+                out.push(App { name, path: p.to_path_buf() });
+            }
+        }
     }
     out.sort_by_key(|a| a.name.to_lowercase());
     out.dedup_by(|a, b| a.name.eq_ignore_ascii_case(&b.name));
@@ -113,5 +129,12 @@ mod tests {
             assert!(all.iter().any(|a| a.name == "Calculator"), "Calculator ships with macOS");
             assert!(all.iter().all(|a| a.path.extension().is_some_and(|e| e == "app")));
         }
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn finder_is_an_installed_app() {
+        let all = installed();
+        assert!(find(&all, "Finder").is_ok(), "Finder lives in CoreServices, not Applications");
     }
 }

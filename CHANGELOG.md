@@ -2,6 +2,22 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
+## Unreleased
+
+### Added
+- **Health › How it's doing.** Success and typical speed of your last 100 Control my Mac requests, against the goals (90% of requests work; one step in about 3 s; several steps in about 8 s). Each request's steps and times are kept on your Mac only.
+- A benchmark of 31 real tasks for developers (`--selftest-bench`), run end to end and checked on the Mac.
+
+### Fixed
+- Apps asked to come forward now really do: Xpu Command asks through Accessibility, then LaunchServices, then raises the window, and checks. `open_app` reports honestly when another app stayed in front.
+- Finder (and other system apps outside Applications) can be opened and controlled by name.
+- An app with no window open (closed, hidden or not running) is opened and its window waited for, instead of failing.
+- Buttons that refuse a click (often in Electron apps like Cursor and Slack) are clicked with the mouse, or focused and pressed with Space; when nothing works the assistant is told to use the menu bar or a shortcut.
+- When a browser doesn't allow page access yet, reading the page falls back to reading the window, so the request goes on.
+- Play, pause, next and previous use the media keys when Xpu Command isn't allowed to control Spotify or Music directly.
+- Opening a folder brings Finder to the front.
+- File search finds files made moments ago anywhere in your home folder, matches names however they are separated ("bench invoice" finds bench-invoice.pdf), and lists your own documents before build and cache files. In the benchmark, reading a file went from 7.3 s to 3.7 s.
+
 ## 0.9.1 (2026-11-17)
 
 ### Changed
