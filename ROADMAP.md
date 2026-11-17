@@ -11,11 +11,11 @@ The same rules hold for everything below: every app and your files start Off, ri
 | **Works inside web pages** | Reads the page, clicks, fills in and submits forms in Safari and Chrome-based browsers | 0.8 |
 | **Understands "this"** | Your selected text and the page you're on come with your request | 0.8 |
 | **Right-click, drag, copy and wait** | Uses the mouse and clipboard like you do, and waits for pages to load | 0.8 |
-| **Your files** | Find (Spotlight), read (text, PDF, Word), open, move, rename, Trash and new folders in your home folder; all undoable; never hidden folders, Library, apps or scripts | Next update |
-| **Polished dictation** | Removes fillers, fixes punctuation and fits the app you're in (chat, email, code); "make that shorter", "more polite", "in Spanish", "scratch that" edit what you just said | Next update |
-| **Shows its plan and checks its work** | Multi-step requests show their steps in the pill; each action in a window or page is checked and retried another way once; the model is chosen automatically | Next update |
-| **"Hey Xpu"** | An optional wake phrase detected on your Mac, so no button is needed | Next update |
-| **Every message in 8 languages** | Pill hints, steps, results, errors and spoken questions | Next update |
+| **Your files** | Find (Spotlight), read (text, PDF, Word), open, move, rename, Trash and new folders in your home folder; all undoable; never hidden folders, Library, apps or scripts | 0.9 |
+| **Polished dictation** | Removes fillers, fixes punctuation and fits the app you're in (chat, email, code); "make that shorter", "more polite", "in Spanish", "scratch that" edit what you just said | 0.9 |
+| **Shows its plan and checks its work** | Multi-step requests show their steps in the pill; each action in a window or page is checked and retried another way once; the model is chosen automatically | 0.9 |
+| **"Hey Xpu"** | An optional wake phrase detected on your Mac, so no button is needed | 0.9 |
+| **Every message in 8 languages** | Pill hints, steps, results, errors and spoken questions | 0.9 |
 
 ## Next (planned)
 

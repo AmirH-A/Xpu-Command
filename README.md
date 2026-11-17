@@ -26,10 +26,10 @@ and a spoken summary in your headset when it's done.
 
 | | |
 |---|---|
-| Version | 0.8.0 |
+| Version | 0.9.0 |
 | Requires | macOS 12 or later, a Mac with Apple silicon (M1 or newer) |
-| File | `Xpu-Command-0.8.0-arm64.dmg` (5.3 MB) |
-| SHA-256 | `0700786c87197a878da79b9d16b5beabb9a0608c481175564659fd4cf91991aa` |
+| File | `Xpu-Command-0.9.0-arm64.dmg` (5.5 MB) |
+| SHA-256 | `4e2d1cbe2db6dfb2d8bbdf0e84090e289a83512df6219143aa2d5517fed7f0da` |
 
 What's new in each version: [CHANGELOG.md](CHANGELOG.md).
 
@@ -48,7 +48,7 @@ This build is not notarized by Apple yet, so macOS asks once. To open it:
 
 You only do this once per version. If you prefer Terminal: `xattr -dr com.apple.quarantine "/Applications/Xpu Command.app"`, then open the app normally.
 
-Agent features need [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://github.com/openai/codex) installed and signed in. To check your download: `shasum -a 256 Xpu-Command-0.8.0-arm64.dmg`.
+Agent features need [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://github.com/openai/codex) installed and signed in. To check your download: `shasum -a 256 Xpu-Command-0.9.0-arm64.dmg`.
 
 ## How it works
 

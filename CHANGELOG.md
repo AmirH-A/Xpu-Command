@@ -2,7 +2,7 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
-## Unreleased
+## 0.9.0 (2026-11-17)
 
 ### Added
 - **Your files.** Control my Mac finds files by name (Spotlight, plus files made moments ago), reads documents (text, PDF, Word, RTF, HTML), opens files and folders, moves, renames, makes folders and moves things to the Trash. Every change can be undone; nothing is ever replaced. Files start Off: allow **Your files** at the top of Settings › Apps (See to find and read, Control to change), or say yes when asked. Hidden folders, Library, apps, installers and scripts are never touched, and the Trash always needs your yes.
