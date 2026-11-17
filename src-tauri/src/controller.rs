@@ -3,6 +3,7 @@ use crate::audio::{Captured, Recording};
 use crate::error::{msg, Error, Result};
 use crate::input::ButtonEvent;
 use crate::settings::{Delivery, Settings, SttEngine, TalkMode};
+use crate::i18n::{tr, trf};
 use crate::{agents, dictation, inject, sanitize, speech, stt};
 use parking_lot::{Mutex, RwLock};
 use serde::Serialize;
@@ -164,11 +165,11 @@ impl crate::mac::server::Host for MacHost {
         let (tx, rx) = tokio::sync::oneshot::channel();
         *self.ctl.pending.lock() = Some(tx);
         match ask {
-            crate::mac::server::Ask::Cancel => self.ctl.overlay(&self.app, Phase::Pending, text, Some("Press or knock to cancel")),
+            crate::mac::server::Ask::Cancel => self.ctl.overlay(&self.app, Phase::Pending, text, Some(tr("Press or knock to cancel"))),
             crate::mac::server::Ask::Approve => {
-                self.ctl.overlay(&self.app, Phase::Confirm, &format!("{text}?"), Some("Press or knock to allow"));
+                self.ctl.overlay(&self.app, Phase::Confirm, &format!("{text}?"), Some(tr("Press or knock to allow")));
                 if self.speak {
-                    speech::speak(format!("{text}? Press or knock to allow."));
+                    speech::speak(trf("{what}? Press or knock to allow.", &[("what", text)]));
                 }
             }
         }
@@ -205,7 +206,7 @@ impl crate::mac::server::Host for AgentHost {
     }
     fn end_ask(&self) {
         self.ctl.pending.lock().take();
-        self.ctl.overlay(&self.app, Phase::Working, "Working…", Some(&self.agent));
+        self.ctl.overlay(&self.app, Phase::Working, tr("Working…"), Some(&self.agent));
     }
     fn record(&self, tool: &str, summary: &str, outcome: crate::mac::server::Outcome, detail: &str) {
         crate::activity::record(tool, summary, outcome, detail);
@@ -216,16 +217,16 @@ impl crate::mac::server::Host for AgentHost {
         use crate::agents::approvals::{parse_answer, Answer};
         use crate::mac::server::Via;
         let (tx, rx) = tokio::sync::oneshot::channel();
-        let shown = format!("{} wants to {}", self.agent, q.what);
+        let shown = trf("{agent} wants to {what}", &[("agent", &self.agent), ("what", &q.what)]);
         let hint = match q.danger {
-            Some(d) => format!("This {d}: say “yes” to allow"),
-            None => "Say yes or no, or press to allow".to_string(),
+            Some(d) => trf("This {danger}: say “yes” to allow", &[("danger", tr(d))]),
+            None => tr("Say yes or no, or press to allow").to_string(),
         };
         let spoken = {
             let what = q.what.replace('`', "");
             match q.danger {
-                Some(d) => format!("{} wants to {what}. This {d}. Say yes to allow, or no.", self.agent),
-                None => format!("{} wants to {what}. Say yes or no.", self.agent),
+                Some(d) => trf("{agent} wants to {what}. This {danger}. Say yes to allow, or no.", &[("agent", &self.agent), ("what", &what), ("danger", tr(d))]),
+                None => trf("{agent} wants to {what}. Say yes or no.", &[("agent", &self.agent), ("what", &what)]),
             }
         };
         let (ctl, app, speak, danger) = (self.ctl.clone(), self.app.clone(), self.speak, q.danger.is_some());
@@ -254,7 +255,7 @@ impl crate::mac::server::Host for AgentHost {
                             return;
                         }
                         if danger {
-                            ctl.overlay(&app, Phase::Confirm, &shown, Some("A press can't allow this one: say “yes”"));
+                            ctl.overlay(&app, Phase::Confirm, &shown, Some(tr("A press can't allow this one: say “yes”")));
                             press = arm(&ctl);
                             continue;
                         }
@@ -278,9 +279,9 @@ impl crate::mac::server::Host for AgentHost {
                                 return;
                             }
                             None if !text.is_empty() => {
-                                ctl.overlay(&app, Phase::Confirm, &shown, Some("Sorry: yes or no?"));
+                                ctl.overlay(&app, Phase::Confirm, &shown, Some(tr("Sorry: yes or no?")));
                                 if speak {
-                                    speech::speak_and_wait("Sorry, yes or no?".to_string()).await;
+                                    speech::speak_and_wait(tr("Sorry, yes or no?").to_string()).await;
                                 }
                             }
                             None => {}
@@ -309,11 +310,31 @@ pub enum Phase {
     Hidden,
 }
 
+impl Phase {
+    /// The pill's label, in the app's language.
+    fn label(&self) -> &'static str {
+        tr(match self {
+            Phase::Listening => "Listening",
+            Phase::Transcribing => "Transcribing",
+            Phase::Typing => "Typing",
+            Phase::Working => "Working",
+            Phase::Done => "Done",
+            Phase::Error => "Problem",
+            Phase::Pending => "About to",
+            Phase::Confirm => "Allow?",
+            Phase::Hidden => return "",
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct OverlayState {
     pub phase: Phase,
+    pub label: &'static str,
     pub text: String,
     pub agent: Option<String>,
+    /// The text is the user's words as they speak (not a hint).
+    pub live: bool,
 }
 
 pub struct Controller {
@@ -449,7 +470,7 @@ impl Controller {
                         match verdict {
                             crate::vad::Verdict::Done => this.stop_if(&a, id),
                             _ if trigger == Trigger::Reply => this.cancel_if(&a, id, ""),
-                            _ => this.cancel_if(&a, id, "Didn't hear anything"),
+                            _ => this.cancel_if(&a, id, tr("Didn't hear anything")),
                         }
                     });
                 }
@@ -462,7 +483,7 @@ impl Controller {
                 if cues {
                     crate::cues::play(crate::cues::Cue::Start);
                 }
-                let hint = match (trigger, auto) {
+                let hint = tr(match (trigger, auto) {
                     (Trigger::Reply, _) => "Listening for your reply… (or say “that's all”)",
                     (Trigger::Hold, _) => "Listening… release to send",
                     (Trigger::Click, true) => "Listening… pause or click to send",
@@ -472,7 +493,7 @@ impl Controller {
                     (Trigger::Headset, true) => "Listening… pause or press your AirPods to send",
                     (Trigger::Headset, false) => "Listening… press your AirPods to send",
                     (Trigger::Wake, _) => "Listening… pause to send",
-                };
+                });
                 self.overlay(app, Phase::Listening, hint, None);
             }
             Err(e) => self.fail(app, e),
@@ -518,7 +539,7 @@ impl Controller {
                     r.vad.lock().set_end_silence(if complete { crate::vad::QUICK_END_MS } else { crate::vad::END_SILENCE_MS });
                 }
                 if !text.is_empty() && !crate::vad::is_phantom(&text, voiced) && text != shown {
-                    this.overlay(&app, Phase::Listening, &text, None);
+                    this.show(&app, Phase::Listening, &text, None, true);
                     shown = text;
                 }
             }
@@ -589,7 +610,7 @@ impl Controller {
         let this = self.clone();
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
-            this.overlay(&app, Phase::Transcribing, "Transcribing…", None);
+            this.overlay(&app, Phase::Transcribing, tr("Transcribing…"), None);
             let result = async {
                 let audio = tauri::async_runtime::spawn_blocking(move || -> Result<Captured> {
                     let full = rec.finish()?;
@@ -618,15 +639,15 @@ impl Controller {
             return Ok(());
         }
         if peak >= SILENT_PEAK && !heard.spoke && peak < NOTHING_SAID_PEAK {
-            self.overlay(app, Phase::Error, "Didn't hear anything", None);
+            self.overlay(app, Phase::Error, tr("Didn't hear anything"), None);
             self.hide_later(app, Duration::from_millis(1500));
             return Ok(());
         }
         if peak < SILENT_PEAK {
             return Err(msg(if cfg!(target_os = "macos") {
-                "No sound from the microphone. Turn on Xpu Command in System Settings › Privacy & Security › Microphone."
+                tr("No sound from the microphone. Turn on Xpu Command in System Settings › Privacy & Security › Microphone.")
             } else {
-                "No sound from the microphone. Check microphone access and the input device in Settings."
+                tr("No sound from the microphone. Check microphone access and the input device in Settings.")
             }));
         }
         let s = self.settings.read().clone();
@@ -639,7 +660,7 @@ impl Controller {
             return Ok(());
         }
         if text.is_empty() || crate::vad::is_phantom(&text, heard.voiced_ms) {
-            self.overlay(app, Phase::Error, "Didn't catch that", None);
+            self.overlay(app, Phase::Error, tr("Didn't catch that"), None);
             self.hide_later(app, Duration::from_secs(2));
             return Ok(());
         }
@@ -653,7 +674,7 @@ impl Controller {
             match voice_command(&text) {
                 Some(VoiceCommand::Stop) => {
                     let stopped = self.agent_cancel.lock().take().map(|c| c.send(()).is_ok()).unwrap_or(false);
-                    self.overlay(app, Phase::Done, if stopped { "Stopped the agent" } else { "Nothing to stop" }, None);
+                    self.overlay(app, Phase::Done, tr(if stopped { "Stopped the agent" } else { "Nothing to stop" }), None);
                     self.hide_later(app, Duration::from_secs(2));
                     return Ok(());
                 }
@@ -663,7 +684,7 @@ impl Controller {
                 }
                 Some(VoiceCommand::Undo) => {
                     let said = self.undo().await;
-                    self.overlay(app, Phase::Done, &said, Some("Undo"));
+                    self.overlay(app, Phase::Done, &said, Some(tr("Undo")));
                     if s.speak_summary {
                         speech::speak(said);
                     }
@@ -672,7 +693,7 @@ impl Controller {
                 }
                 Some(VoiceCommand::NewTask) => {
                     self.session.lock().take();
-                    self.overlay(app, Phase::Done, "New conversation: the next request starts fresh", None);
+                    self.overlay(app, Phase::Done, tr("New conversation: the next request starts fresh"), None);
                     self.hide_later(app, Duration::from_secs(2));
                     return Ok(());
                 }
@@ -730,7 +751,7 @@ impl Controller {
         let new = match edit {
             dictation::Edit::Delete => String::new(),
             dictation::Edit::Rewrite(how) => {
-                self.overlay(app, Phase::Working, "Rewriting…", Some("Dictation"));
+                self.overlay(app, Phase::Working, tr("Rewriting…"), Some(tr("Dictation")));
                 let profile = s.claude_profile.as_deref().map(crate::settings::claude_profile_dir).transpose()?;
                 let out = dictation::rewrite(&last.text, &how, profile.as_deref()).await?;
                 if s.polish { dictation::polish(&out, style) } else { out }
@@ -742,10 +763,10 @@ impl Controller {
         *self.typed.lock() = (!new.is_empty()).then(|| inject::Typed { text: new.clone(), pid: last.pid, at: Instant::now() });
         self.record_timing("Edit");
         if new.is_empty() {
-            self.overlay(app, Phase::Done, "Removed it", Some("Dictation"));
+            self.overlay(app, Phase::Done, tr("Removed it"), Some(tr("Dictation")));
             self.hide_later(app, Duration::from_millis(1200));
         } else {
-            self.overlay(app, Phase::Done, &new, Some("Dictation"));
+            self.overlay(app, Phase::Done, &new, Some(tr("Dictation")));
             self.hide_later(app, Duration::from_secs(3));
         }
         Ok(())
@@ -798,7 +819,7 @@ impl Controller {
     async fn transcribe(&self, s: &Settings, audio: Captured, vocabulary: String) -> Result<String> {
         let raw = match s.stt {
             SttEngine::Local if s.local_model.ends_with(".en") && !matches!(s.language.as_str(), "en" | "auto") => {
-                return Err(msg("This speech model only understands English. In Settings › Speech to text, pick a multilingual model (Small is best for Persian)."));
+                return Err(msg(tr("This speech model only understands English. In Settings › Speech to text, pick a multilingual model (Small is best for Persian).")));
             }
             SttEngine::Local => {
                 let engine = self.engine.clone();
@@ -844,9 +865,9 @@ impl Controller {
     }
 
     async fn run_agent(self: &Arc<Self>, app: &AppHandle, s: &Settings, text: &str) -> Result<()> {
-        let project = s.project_dir.clone().ok_or_else(|| msg("choose a project folder in settings first"))?;
+        let project = s.project_dir.clone().ok_or_else(|| msg(tr("Choose a project folder in Settings first")))?;
         if self.agent_cancel.lock().is_some() {
-            return Err(msg("the agent is still working; say \"stop\" to stop it"));
+            return Err(msg(tr("The agent is still working; say “stop” to stop it")));
         }
         let name = agents::name(s.agent).to_string();
         let project = crate::settings::validate_project_dir(&project)?;
@@ -895,22 +916,23 @@ impl Controller {
     #[cfg(target_os = "macos")]
     pub async fn run_routine(self: &Arc<Self>, app: &AppHandle, s: &Settings, r: crate::routines::Routine) -> Result<()> {
         if self.agent_cancel.lock().is_some() {
-            return Err(msg("still working on the last request; say \"stop\" to stop it"));
+            return Err(msg(tr("Still working on the last request; say “stop” to stop it")));
         }
         let workspace = crate::mac::workspace()?;
         let host = MacHost::new(self, app, s.speak_summary);
         let policy = s.mac_policy();
         let exec = Arc::new(crate::mac::exec::MacExec::new(policy.clone(), workspace).with_memory(s.memory).without_learning());
         let steps: Vec<(String, serde_json::Value)> = r.steps.iter().map(|st| (st.tool.clone(), st.args.clone())).collect();
-        self.overlay(app, Phase::Working, &format!("Routine: {}", r.name), Some("Routine"));
+        self.overlay(app, Phase::Working, &trf("Routine: {name}", &[("name", &r.name)]), Some(tr("Routine")));
         let (done, stopped) = crate::mac::server::run_steps(host, exec, policy, Default::default(), &steps).await;
         crate::frame::hide(app);
         let said = match stopped {
-            None => format!("Ran {}: {} step{}", r.name, done.len(), if done.len() == 1 { "" } else { "s" }),
-            Some(why) => format!("Stopped {} after {} of {} steps: {}", r.name, done.len(), steps.len(), crate::agents::clip(&why, 120)),
+            None if done.len() == 1 => trf("Ran {name}: 1 step", &[("name", &r.name)]),
+            None => trf("Ran {name}: {count} steps", &[("name", &r.name), ("count", &done.len().to_string())]),
+            Some(why) => trf("Stopped {name} after {done} of {total} steps: {why}", &[("name", &r.name), ("done", &done.len().to_string()), ("total", &steps.len().to_string()), ("why", &crate::agents::clip(&why, 120))]),
         };
         self.record_timing("Routine");
-        self.overlay(app, Phase::Done, &said, Some("Routine"));
+        self.overlay(app, Phase::Done, &said, Some(tr("Routine")));
         if s.speak_summary {
             speech::speak(said);
         }
@@ -953,7 +975,7 @@ impl Controller {
                 true
             }
             (Some(why), _) if why.contains("cancelled") || why.contains("did not") => {
-                self.overlay(app, Phase::Done, "Cancelled", Some("Mac"));
+                self.overlay(app, Phase::Done, tr("Cancelled"), Some("Mac"));
                 self.hide_later(app, Duration::from_millis(1500));
                 true
             }
@@ -973,11 +995,11 @@ impl Controller {
 
     pub async fn undo(&self) -> String {
         if self.agent_cancel.lock().is_some() {
-            return "Still working on the last request; say \"stop\" first".into();
+            return tr("Still working on the last request; say “stop” first").into();
         }
         #[cfg(target_os = "macos")]
         {
-            let said = tokio::task::spawn_blocking(crate::mac::exec::undo_last).await.unwrap_or_else(|_| "Undo failed".into());
+            let said = tokio::task::spawn_blocking(crate::mac::exec::undo_last).await.unwrap_or_else(|_| tr("Undo failed").into());
             if said != crate::mac::undo::summary(&[], &[]) {
                 crate::activity::record("undo", &said, crate::mac::server::Outcome::Done, "");
             }
@@ -993,7 +1015,7 @@ impl Controller {
     #[cfg(target_os = "macos")]
     async fn run_mac(self: &Arc<Self>, app: &AppHandle, s: &Settings, text: &str) -> Result<()> {
         if self.agent_cancel.lock().is_some() {
-            return Err(msg("still working on the last request; say \"stop\" to stop it"));
+            return Err(msg(tr("Still working on the last request; say “stop” to stop it")));
         }
         let workspace = crate::mac::workspace()?;
         let resume = {
@@ -1055,7 +1077,7 @@ impl Controller {
         let Follow { name, project, continuing, speak, agent, profile } = f;
         let profile_name = profile;
         *self.agent_cancel.lock() = Some(run.cancel);
-        let label = if continuing { format!("{name} · continuing") } else { name.clone() };
+        let label = if continuing { trf("{name} · continuing", &[("name", &name)]) } else { name.clone() };
         self.overlay(app, Phase::Working, &format!("“{}”", agents::clip(text, 90)), Some(&label));
         let (this, app) = (self.clone(), app.clone());
         tauri::async_runtime::spawn(async move {
@@ -1072,7 +1094,7 @@ impl Controller {
                         if let Some(x) = this.session.lock().as_mut() {
                             x.at = Instant::now();
                         }
-                        let shown = if summary.is_empty() { "Done".to_string() } else { summary.clone() };
+                        let shown = if summary.is_empty() { tr("Done").to_string() } else { summary.clone() };
                         this.overlay(&app, Phase::Done, &shown, Some(&name));
                         reply_after = this.settings.read().conversation;
                         if speak && !summary.is_empty() {
@@ -1122,6 +1144,10 @@ impl Controller {
     }
 
     pub fn overlay(&self, app: &AppHandle, phase: Phase, text: &str, agent: Option<&str>) {
+        self.show(app, phase, text, agent, false);
+    }
+
+    fn show(&self, app: &AppHandle, phase: Phase, text: &str, agent: Option<&str>, live: bool) {
         self.generation.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.set_tray_live(app, matches!(phase, Phase::Listening | Phase::Confirm | Phase::Pending));
         let Some(w) = app.get_webview_window("overlay") else { return };
@@ -1132,7 +1158,7 @@ impl Controller {
             let _ = w.set_ignore_cursor_events(true);
             crate::overlay_window::show_without_focus(&w);
         }
-        let _ = app.emit_to("overlay", "overlay", OverlayState { phase, text: text.to_string(), agent: agent.map(str::to_string) });
+        let _ = app.emit_to("overlay", "overlay", OverlayState { label: phase.label(), phase, text: text.to_string(), agent: agent.map(str::to_string), live });
     }
 
     /// Hides the overlay after `d`, unless something newer was shown meanwhile.

@@ -176,7 +176,7 @@ enum Next {
 
 fn run(app: &tauri::AppHandle, ctl: &Arc<Controller>) -> Result<Next, String> {
     let s = ctl.settings.read().clone();
-    let model = crate::stt::model::find(&s.local_model).filter(|m| crate::stt::model::is_downloaded(m)).ok_or("it needs a speech model on this Mac: download one in Speech")?;
+    let model = crate::stt::model::find(&s.local_model).filter(|m| crate::stt::model::is_downloaded(m)).ok_or(crate::i18n::tr("it needs a speech model on this Mac: download one in Speech"))?;
     let model_id = model.id.to_string();
     let language = if s.local_model.ends_with(".en") { "en".to_string() } else { s.language.clone() };
     let device = s.input_device.clone();
@@ -194,7 +194,7 @@ fn run(app: &tauri::AppHandle, ctl: &Arc<Controller>) -> Result<Next, String> {
         let rms = match rx.recv_timeout(Duration::from_secs(1)) {
             Ok(r) => r,
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => 0.0,
-            Err(_) => return Err("the microphone stopped".into()),
+            Err(_) => return Err(crate::i18n::tr("the microphone stopped").into()),
         };
         {
             let now = ctl.settings.read();

@@ -55,13 +55,14 @@ impl Adapter for Claude {
                             }
                             let input = block.get("input");
                             let path = input.and_then(|i| i.get("file_path").or_else(|| i.get("path"))).and_then(Value::as_str).map(file_name);
+                            use crate::i18n::{tr, trf};
                             status = Some(match (name, path) {
-                                ("Read", Some(p)) => format!("Reading {p}"),
-                                ("Edit" | "MultiEdit" | "Write" | "NotebookEdit", Some(p)) => format!("Editing {p}"),
-                                ("Glob" | "Grep", _) => "Searching the project".to_string(),
-                                ("TodoWrite", _) => "Planning".to_string(),
-                                ("Task" | "Agent", _) => "Delegating a subtask".to_string(),
-                                (n, _) => format!("Using {n}"),
+                                ("Read", Some(p)) => trf("Reading {file}", &[("file", &p)]),
+                                ("Edit" | "MultiEdit" | "Write" | "NotebookEdit", Some(p)) => trf("Editing {file}", &[("file", &p)]),
+                                ("Glob" | "Grep", _) => tr("Searching the project").to_string(),
+                                ("TodoWrite", _) => tr("Planning").to_string(),
+                                ("Task" | "Agent", _) => tr("Delegating a subtask").to_string(),
+                                (n, _) => trf("Using {tool}", &[("tool", n)]),
                             });
                         }
                         _ => {}
@@ -134,7 +135,7 @@ pub fn mac_args(m: &super::MacArgs<'_>, resume: Option<&str>) -> Vec<String> {
 pub fn friendly_error(m: &str) -> String {
     let l = m.to_lowercase();
     if l.contains("oauth") || l.contains("authenticat") || l.contains("401") || l.contains("not logged in") || l.contains("login") {
-        return "Claude Code isn't signed in for this profile: run it in a terminal (e.g. claude-work) and use /login, or pick another profile in Settings".into();
+        return crate::i18n::tr("Claude Code isn't signed in for this profile: run it in a terminal (e.g. claude-work) and use /login, or pick another profile in Settings").into();
     }
     clip(m, 200)
 }

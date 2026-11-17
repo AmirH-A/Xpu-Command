@@ -361,27 +361,21 @@ fn describe(call: &Call, target: Option<&Target>) -> String {
     let base = call.describe();
     let Some(t) = target else { return base };
     let label = t.label.as_deref().map(|l| crate::agents::clip(l, 60));
+    use crate::i18n::trf;
     let s = match (call, label) {
-        (Call::TypeText { text, submit, .. }, Some(l)) => {
-            format!("Typing “{}” into {l} in {}{}", crate::agents::clip(text, 40), t.name, if *submit { ", then Return" } else { "" })
-        }
-        (Call::ClickAt { kind, .. } | Call::Click { kind, .. } | Call::ClickPage { kind, .. }, Some(l)) => format!("{} {l} in {}", verb(*kind), t.name),
-        (Call::FillPage { text, submit, .. }, Some(l)) => {
-            format!("Filling {l} in {} with “{}”{}", t.name, crate::agents::clip(text, 40), if *submit { ", then submitting" } else { "" })
-        }
-        (Call::Drag { .. }, Some(l)) => format!("Dragging {l} in {}", t.name),
+        (Call::TypeText { text, submit, .. }, Some(l)) => trf(
+            if *submit { "Typing “{text}” into {label} in {app}, then Return" } else { "Typing “{text}” into {label} in {app}" },
+            &[("text", &crate::agents::clip(text, 40)), ("label", &l), ("app", &t.name)],
+        ),
+        (Call::ClickAt { kind, .. } | Call::Click { kind, .. } | Call::ClickPage { kind, .. }, Some(l)) => trf("{verb} {label} in {app}", &[("verb", kind.verb()), ("label", &l), ("app", &t.name)]),
+        (Call::FillPage { text, submit, .. }, Some(l)) => trf(
+            if *submit { "Filling {label} in {app} with “{text}”, then submitting" } else { "Filling {label} in {app} with “{text}”" },
+            &[("label", &l), ("app", &t.name), ("text", &crate::agents::clip(text, 40))],
+        ),
+        (Call::Drag { .. }, Some(l)) => trf("Dragging {label} in {app}", &[("label", &l), ("app", &t.name)]),
         _ => base,
     };
     crate::agents::clip(&s, 140)
-}
-
-fn verb(kind: tools::ClickKind) -> &'static str {
-    match kind {
-        tools::ClickKind::Left => "Clicking",
-        tools::ClickKind::Double => "Double-clicking",
-        tools::ClickKind::Right => "Right-clicking",
-        tools::ClickKind::Hover => "Pointing at",
-    }
 }
 
 /// Waits for the user's press: true if pressed within `wait`.
@@ -429,7 +423,10 @@ async fn call_tool(st: &State, name: &str, args: &Value) -> (Output, bool) {
         let d = policy::decide(call.risk(), target.as_ref(), call.flags(), st_policy, &st_run.lock());
         match (d, target.as_ref()) {
             (Decision::Grant(need), Some(t)) => {
-                let question = format!("Let the assistant {} {} for this request", need.verb(), t.name);
+                let question = crate::i18n::trf(
+                    if need == policy::Need::See { "Let the assistant see {app} for this request" } else { "Let the assistant control {app} for this request" },
+                    &[("app", &t.name)],
+                );
                 st.host.highlight(t.frame);
                 if !pressed(st, Ask::Approve, &question, st.limits.confirm).await {
                     st.host.highlight(None);

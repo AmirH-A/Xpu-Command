@@ -90,18 +90,19 @@ fn claude_signed_in(profile: Option<&Path>) -> Option<bool> {
 
 pub fn recovery(error: &str) -> String {
     let e = error.to_lowercase();
+    use crate::i18n::tr;
     let fix = if e.contains("cli not found") || e.contains("install it first") {
-        "Claude Code isn't installed. Install it and sign in, then try again. Settings › Health shows how."
+        tr("Claude Code isn't installed. Install it and sign in, then try again. Settings › Health shows how.")
     } else if e.contains("no microphone found") {
-        "No microphone found. Connect one, or pick another in Settings › Speech."
+        tr("No microphone found. Connect one, or pick another in Settings › Speech.")
     } else if e.contains("not downloaded yet") {
-        "The speech model isn't downloaded yet. Download it in Settings › Get started."
+        tr("The speech model isn't downloaded yet. Download it in Settings › Get started.")
     } else if e.contains("timed out") || e.contains("took too long") {
-        "That took too long and was stopped. Try a shorter request."
+        tr("That took too long and was stopped. Try a shorter request.")
     } else if e.contains("error sending request") || e.contains("dns") || e.contains("connection") || e.contains("network") {
-        "Can't reach the internet. Check your connection, or switch Speech to On this Mac."
+        tr("Can't reach the internet. Check your connection, or switch Speech to On this Mac.")
     } else if e.contains("no api key") {
-        "Cloud speech needs an OpenAI key. Add one in Settings › Speech, or switch to On this Mac."
+        tr("Cloud speech needs an OpenAI key. Add one in Settings › Speech, or switch to On this Mac.")
     } else {
         return error.to_string();
     };

@@ -36,29 +36,30 @@ fn file_name(p: &str) -> String {
 /// Builds the question for a permission prompt. Untrusted input: everything shown is cleaned
 /// and shortened.
 pub fn question(tool: &str, input: &Value) -> Question {
+    use crate::i18n::trf;
     let clip = |t: &str, n: usize| super::clip(t, n);
     let (what, danger, key) = match tool {
         "Bash" | "PowerShell" => {
             let cmd = s(input, "command").trim();
-            (format!("run `{}`", clip(cmd, 120)), dangerous_command(cmd), format!("{tool}:{cmd}"))
+            (trf("run {command}", &[("command", &format!("`{}`", clip(cmd, 120)))]), dangerous_command(cmd), format!("{tool}:{cmd}"))
         }
         "WebFetch" => {
             let url = s(input, "url");
             let host = reqwest::Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_else(|| clip(url, 60));
-            (format!("open {host}"), None, format!("WebFetch:{host}"))
+            (trf("open {host}", &[("host", &host)]), None, format!("WebFetch:{host}"))
         }
-        "WebSearch" => (format!("search the web for “{}”", clip(s(input, "query"), 80)), None, format!("WebSearch:{}", s(input, "query"))),
+        "WebSearch" => (trf("search the web for “{query}”", &[("query", &clip(s(input, "query"), 80))]), None, format!("WebSearch:{}", s(input, "query"))),
         "Write" | "Edit" | "MultiEdit" | "NotebookEdit" => {
             let p = [s(input, "file_path"), s(input, "notebook_path"), s(input, "path")].into_iter().find(|x| !x.is_empty()).unwrap_or("");
-            (format!("edit {}", file_name(p)), None, format!("edit:{p}"))
+            (trf("edit {file}", &[("file", &file_name(p))]), None, format!("edit:{p}"))
         }
         "Read" | "Glob" | "Grep" | "LS" => {
             let p = [s(input, "file_path"), s(input, "path"), s(input, "pattern")].into_iter().find(|x| !x.is_empty()).unwrap_or("");
-            (format!("read {}", clip(p, 80)), None, format!("read:{p}"))
+            (trf("read {file}", &[("file", &clip(p, 80))]), None, format!("read:{p}"))
         }
         other => {
             let name = other.strip_prefix("mcp__").unwrap_or(other).replace("__", " › ");
-            (format!("use {}", clip(&name, 60)), None, format!("tool:{other}:{input}"))
+            (trf("use {tool}", &[("tool", &clip(&name, 60))]), None, format!("tool:{other}:{input}"))
         }
     };
     Question { what, danger, key }

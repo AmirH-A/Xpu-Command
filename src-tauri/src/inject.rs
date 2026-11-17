@@ -82,6 +82,7 @@ pub fn type_after(text: &str, submit: bool, _last: Option<&Typed>) -> Result<Str
 /// checks the text is still in the field and selects exactly it, so nothing else is touched.
 #[cfg(target_os = "macos")]
 pub fn replace_typed(t: &Typed, new: &str) -> Result<()> {
+    use crate::i18n::tr;
     use crate::mac::ax;
     if new.chars().any(char::is_control) {
         return Err(msg("refusing to type control characters"));
@@ -93,7 +94,7 @@ pub fn replace_typed(t: &Typed, new: &str) -> Result<()> {
         return Err(crate::error::Error::Permission("Accessibility (to type into other apps)".into()));
     }
     ax::set_global_timeout(1.0);
-    let el = ax::focused_element().filter(|e| e.pid() == Some(t.pid)).ok_or_else(|| msg("The app I typed into isn't in front any more"))?;
+    let el = ax::focused_element().filter(|e| e.pid() == Some(t.pid)).ok_or_else(|| msg(tr("The app I typed into isn't in front any more")))?;
     if matches!(el.attr("AXSubrole"), ax::V::Str(s) if s == "AXSecureTextField") {
         return Err(msg("not editing a password field"));
     }
@@ -104,11 +105,11 @@ pub fn replace_typed(t: &Typed, new: &str) -> Result<()> {
         Some(v) if !v.is_empty() => {
             let value: Vec<u16> = v.encode_utf16().collect();
             let caret = el.range("AXSelectedTextRange").map_or(value.len(), |r| r.0 + r.1);
-            let start = locate(&value, caret, &typed).ok_or_else(|| msg("I can't find what I typed in this field any more"))?;
+            let start = locate(&value, caret, &typed).ok_or_else(|| msg(tr("I can't find what I typed in this field any more")))?;
             el.set_range("AXSelectedTextRange", start, typed.len()).map_err(msg)?;
             let selected = el.string("AXSelectedText").unwrap_or_default();
             if selected != t.text {
-                return Err(msg("I couldn't select what I typed, so I left it as it is"));
+                return Err(msg(tr("I couldn't select what I typed, so I left it as it is")));
             }
             if el.set_string("AXSelectedText", new).is_err() || el.string("AXValue").is_some_and(|after| after == v) {
                 // Some apps (web views, Electron) ignore the write: type over the selection instead.
@@ -123,7 +124,7 @@ pub fn replace_typed(t: &Typed, new: &str) -> Result<()> {
             e.key(Key::Shift, Direction::Release).map_err(|e| msg(format!("typing failed: {e}")))?;
             replace_selection(&mut e, new)?;
         }
-        _ => return Err(msg("This app doesn't show me its text, so I can only edit right after typing")),
+        _ => return Err(msg(tr("This app doesn't show me its text, so I can only edit right after typing"))),
     }
     Ok(())
 }

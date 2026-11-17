@@ -25,15 +25,6 @@ pub enum Need {
     Control,
 }
 
-impl Need {
-    pub fn verb(self) -> &'static str {
-        match self {
-            Need::See => "see",
-            Need::Control => "control",
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Class {
     /// Never seen or controlled, whatever the settings say.

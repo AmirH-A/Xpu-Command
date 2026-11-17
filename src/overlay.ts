@@ -1,11 +1,7 @@
 import { listen } from '@tauri-apps/api/event';
 
 type Phase = 'listening' | 'transcribing' | 'typing' | 'working' | 'done' | 'error' | 'pending' | 'confirm' | 'hidden';
-type OverlayState = { phase: Phase; text: string; agent: string | null };
-
-const LABEL: Record<Phase, string> = {
-  listening: 'Listening', transcribing: 'Transcribing', typing: 'Typing', working: 'Working', done: 'Done', error: 'Problem', pending: 'About to', confirm: 'Allow?', hidden: '',
-};
+type OverlayState = { phase: Phase; label: string; text: string; agent: string | null; live: boolean };
 
 const MIC = '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" fill="none"/>';
 const ICON: Partial<Record<Phase, string>> = {
@@ -33,12 +29,12 @@ const levels: number[] = Array(N).fill(0);
 
 void listen<OverlayState>('overlay', ({ payload }) => {
   pill.dataset.phase = payload.phase;
-  phase.textContent = LABEL[payload.phase] ?? '';
+  phase.textContent = payload.label;
   orb.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[payload.phase] ?? MIC}</svg>`;
   const shown = fit(payload.phase, payload.text);
   text.textContent = shown;
   text.classList.toggle('long', shown.length > 80);
-  text.classList.toggle('live', payload.phase === 'listening' && !payload.text.startsWith('Listening'));
+  text.classList.toggle('live', payload.live);
   text.title = payload.text;
   agent.textContent = payload.agent ?? '';
   if (payload.phase === 'listening') levels.fill(0);

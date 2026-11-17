@@ -248,7 +248,7 @@ no explanation, no markdown. Keep the same language unless the instruction says 
 
 /// Rewrites `text` as instructed, with Claude Code (Haiku, no tools, no settings, no MCP servers).
 pub async fn rewrite(text: &str, instruction: &str, profile: Option<&std::path::Path>) -> Result<String> {
-    let bin = crate::agents::find_binary(crate::settings::AgentKind::Claude).ok_or_else(|| msg("Editing by voice uses Claude Code, which isn't installed"))?;
+    let bin = crate::agents::find_binary(crate::settings::AgentKind::Claude).ok_or_else(|| msg(crate::i18n::tr("Editing by voice uses Claude Code, which isn't installed")))?;
     let input = format!("<text>\n{}\n</text>\n\nInstruction: {instruction}", text.replace("</text>", "</ text>"));
     let out = crate::agents::complete(&bin, &input, REWRITE_PROMPT, "haiku", profile, Duration::from_secs(40)).await?;
     let out = crate::sanitize::clean_transcript(out.trim().trim_matches('"').trim_start_matches("<text>").trim_end_matches("</text>"));

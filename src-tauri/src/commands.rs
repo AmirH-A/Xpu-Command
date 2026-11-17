@@ -24,6 +24,7 @@ pub fn save_settings(app: AppHandle, ctl: Ctl, new: Settings) -> Result<Settings
     }
     settings::save(&new)?;
     crate::speech::set_language(&new.language);
+    crate::i18n::set_language(&new.ui_language);
     if new.hotkey != ctl.settings.read().hotkey {
         crate::hotkey::apply(&app, new.hotkey)?;
     }

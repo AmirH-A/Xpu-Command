@@ -85,10 +85,10 @@ pub fn peek_last_request() -> Vec<String> {
 
 pub fn summary(undone: &[String], failed: &[String]) -> String {
     match (undone.is_empty(), failed.is_empty()) {
-        (true, true) => "Nothing to undo".into(),
-        (false, true) => format!("Undid: {}", undone.join(", ")),
-        (true, false) => format!("Couldn't undo: {}", failed.join(", ")),
-        (false, false) => format!("Undid: {}. Couldn't undo: {}", undone.join(", "), failed.join(", ")),
+        (true, true) => crate::i18n::tr("Nothing to undo").into(),
+        (false, true) => crate::i18n::trf("Undid: {items}", &[("items", &undone.join(", "))]),
+        (true, false) => crate::i18n::trf("Couldn't undo: {items}", &[("items", &failed.join(", "))]),
+        (false, false) => crate::i18n::trf("Undid: {items}. Couldn't undo: {failed}", &[("items", &undone.join(", ")), ("failed", &failed.join(", "))]),
     }
 }
 

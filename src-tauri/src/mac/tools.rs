@@ -39,13 +39,14 @@ pub enum ClickKind {
 }
 
 impl ClickKind {
-    fn verb(self) -> &'static str {
-        match self {
+    /// "Clicking", in the app's language.
+    pub fn verb(self) -> &'static str {
+        crate::i18n::tr(match self {
             ClickKind::Left => "Clicking",
             ClickKind::Double => "Double-clicking",
             ClickKind::Right => "Right-clicking",
             ClickKind::Hover => "Pointing at",
-        }
+        })
     }
 }
 
@@ -202,65 +203,72 @@ impl Call {
 
     /// One line for the pill, the spoken confirmation and the activity log.
     pub fn describe(&self) -> String {
+        use crate::i18n::{tr, trf};
         let s = match self {
-            Call::ListApps => "Looking at your apps".to_string(),
-            Call::OpenApp { name } => format!("Opening {name}"),
-            Call::QuitApp { name } => format!("Quit {name}"),
-            Call::OpenUrl { url } => format!("Opening {}", url.host_str().unwrap_or("the page")),
-            Call::WebSearch { query } => format!("Searching the web for “{query}”"),
-            Call::Media { action, .. } => match action {
+            Call::ListApps => tr("Looking at your apps").to_string(),
+            Call::OpenApp { name } => trf("Opening {name}", &[("name", name)]),
+            Call::QuitApp { name } => trf("Quit {name}", &[("name", name)]),
+            Call::OpenUrl { url } => trf("Opening {name}", &[("name", url.host_str().unwrap_or(tr("the page")))]),
+            Call::WebSearch { query } => trf("Searching the web for “{query}”", &[("query", query)]),
+            Call::Media { action, .. } => tr(match action {
                 MediaAction::Play => "Playing",
                 MediaAction::Pause => "Pausing",
                 MediaAction::Next => "Next track",
                 MediaAction::Previous => "Previous track",
-            }
+            })
             .to_string(),
-            Call::PlayMusic { query, .. } => format!("Playing “{query}”"),
-            Call::SetVolume { mute: Some(true), .. } => "Muting".to_string(),
-            Call::SetVolume { mute: Some(false), level: None } => "Unmuting".to_string(),
-            Call::SetVolume { level, .. } => format!("Volume {}%", level.unwrap_or(50)),
-            Call::DarkMode { on } => format!("Dark mode {}", if *on { "on" } else { "off" }),
-            Call::ListShortcuts => "Looking at your Shortcuts".to_string(),
-            Call::RunShortcut { name } => format!("Run the shortcut “{name}”"),
+            Call::PlayMusic { query, .. } => trf("Playing “{query}”", &[("query", query)]),
+            Call::SetVolume { mute: Some(true), .. } => tr("Muting").to_string(),
+            Call::SetVolume { mute: Some(false), level: None } => tr("Unmuting").to_string(),
+            Call::SetVolume { level, .. } => trf("Volume {level}%", &[("level", &level.unwrap_or(50).to_string())]),
+            Call::DarkMode { on } => tr(if *on { "Dark mode on" } else { "Dark mode off" }).to_string(),
+            Call::ListShortcuts => tr("Looking at your Shortcuts").to_string(),
+            Call::RunShortcut { name } => trf("Run the shortcut “{name}”", &[("name", name)]),
             Call::CreateReminder { title, due, .. } => match due {
-                Some(d) => format!("Reminder: {title} · {}", when(d)),
-                None => format!("Reminder: {title}"),
+                Some(d) => trf("Reminder: {title} · {when}", &[("title", title), ("when", &when(d))]),
+                None => trf("Reminder: {title}", &[("title", title)]),
             },
-            Call::CreateEvent { title, start, .. } => format!("Event: {title} · {}", when(start)),
-            Call::CreateNote { title, .. } => format!("Note: {title}"),
+            Call::CreateEvent { title, start, .. } => trf("Event: {title} · {when}", &[("title", title), ("when", &when(start))]),
+            Call::CreateNote { title, .. } => trf("Note: {title}", &[("title", title)]),
             Call::DraftEmail { to, subject, .. } => match to.first() {
-                Some(a) if to.len() > 1 => format!("Draft email to {a} +{}: {subject}", to.len() - 1),
-                Some(a) => format!("Draft email to {a}: {subject}"),
-                None => format!("Draft email: {subject}"),
+                Some(a) if to.len() > 1 => trf("Draft email to {to} +{more}: {subject}", &[("to", a), ("more", &(to.len() - 1).to_string()), ("subject", subject)]),
+                Some(a) => trf("Draft email to {to}: {subject}", &[("to", a), ("subject", subject)]),
+                None => trf("Draft email: {subject}", &[("subject", subject)]),
             },
-            Call::ListWindows => "Looking at open windows".to_string(),
-            Call::ReadWindow { app } => format!("Reading {app}"),
-            Call::Screenshot { app } => format!("Looking at {app}"),
-            Call::Click { element, kind } => format!("{} control {element}", kind.verb()),
-            Call::TypeText { element, text, submit } => format!("Typing “{}” into control {element}{}", crate::agents::clip(text, 40), if *submit { " and pressing Return" } else { "" }),
-            Call::PressKeys { app, mods, key } => format!("Pressing {}{} in {app}", mods.iter().map(|m| format!("{m}+")).collect::<String>(), key),
-            Call::ChooseMenu { app, path } => format!("Menu {} in {app}", path.join(" › ")),
-            Call::Scroll { app, down, .. } => format!("Scrolling {} in {app}", if *down { "down" } else { "up" }),
-            Call::ClickAt { app, x, y, kind } => format!("{} ({x:.0}, {y:.0}) in {app}", kind.verb()),
-            Call::Drag { from, to } => format!("Dragging control {from} onto control {to}"),
-            Call::Wait { app, text: Some(t), .. } => format!("Waiting for “{}” in {app}", crate::agents::clip(t, 40)),
-            Call::Wait { app, seconds, .. } => format!("Waiting {seconds} s for {app}"),
-            Call::ReadPage { app } => format!("Reading the page in {app}"),
-            Call::ClickPage { element, kind } => format!("{} page item {element}", kind.verb()),
-            Call::FillPage { element, text, submit } => format!("Filling page item {element} with “{}”{}", crate::agents::clip(text, 40), if *submit { " and submitting" } else { "" }),
-            Call::CopyText { text } => format!("Copying “{}”", crate::agents::clip(text, 40)),
-            Call::ReadClipboard => "Reading the clipboard".to_string(),
-            Call::FindFiles { query, .. } => format!("Finding files named “{query}”"),
-            Call::ReadFile { path } => format!("Reading {}", file_name(path)),
-            Call::OpenFile { path, app: Some(a) } => format!("Opening {} in {a}", file_name(path)),
-            Call::OpenFile { path, .. } => format!("Opening {}", file_name(path)),
-            Call::MoveFiles { paths, to } => format!("Move {} to {}", items(paths), file_name(to)),
-            Call::RenameFile { path, name } => format!("Rename {} to {name}", file_name(path)),
-            Call::TrashFiles { paths } => format!("Move {} to the Trash", items(paths)),
-            Call::NewFolder { parent, name } => format!("New folder “{name}” in {}", file_name(parent)),
-            Call::Remember { text } => format!("Remembering: {text}"),
-            Call::Forget { text } => format!("Forgetting “{text}”"),
-            Call::SaveRoutine { name, steps } => format!("Save the routine “{name}”: {}", steps.iter().map(crate::routines::label).collect::<Vec<_>>().join(", ")),
+            Call::ListWindows => tr("Looking at open windows").to_string(),
+            Call::ReadWindow { app } => trf("Reading {app}", &[("app", app)]),
+            Call::Screenshot { app } => trf("Looking at {app}", &[("app", app)]),
+            Call::Click { element, kind } => trf("{verb} control {n}", &[("verb", kind.verb()), ("n", &element.to_string())]),
+            Call::TypeText { element, text, submit } => trf(
+                if *submit { "Typing “{text}” into control {n} and pressing Return" } else { "Typing “{text}” into control {n}" },
+                &[("text", &crate::agents::clip(text, 40)), ("n", &element.to_string())],
+            ),
+            Call::PressKeys { app, mods, key } => trf("Pressing {keys} in {app}", &[("keys", &format!("{}{key}", mods.iter().map(|m| format!("{m}+")).collect::<String>())), ("app", app)]),
+            Call::ChooseMenu { app, path } => trf("Menu {path} in {app}", &[("path", &path.join(" › ")), ("app", app)]),
+            Call::Scroll { app, down, .. } => trf(if *down { "Scrolling down in {app}" } else { "Scrolling up in {app}" }, &[("app", app)]),
+            Call::ClickAt { app, x, y, kind } => trf("{verb} ({x}, {y}) in {app}", &[("verb", kind.verb()), ("x", &format!("{x:.0}")), ("y", &format!("{y:.0}")), ("app", app)]),
+            Call::Drag { from, to } => trf("Dragging control {from} onto control {to}", &[("from", &from.to_string()), ("to", &to.to_string())]),
+            Call::Wait { app, text: Some(t), .. } => trf("Waiting for “{text}” in {app}", &[("text", &crate::agents::clip(t, 40)), ("app", app)]),
+            Call::Wait { app, seconds, .. } => trf("Waiting {seconds} s for {app}", &[("seconds", &seconds.to_string()), ("app", app)]),
+            Call::ReadPage { app } => trf("Reading the page in {app}", &[("app", app)]),
+            Call::ClickPage { element, kind } => trf("{verb} page item {n}", &[("verb", kind.verb()), ("n", &element.to_string())]),
+            Call::FillPage { element, text, submit } => trf(
+                if *submit { "Filling page item {n} with “{text}” and submitting" } else { "Filling page item {n} with “{text}”" },
+                &[("n", &element.to_string()), ("text", &crate::agents::clip(text, 40))],
+            ),
+            Call::CopyText { text } => trf("Copying “{text}”", &[("text", &crate::agents::clip(text, 40))]),
+            Call::ReadClipboard => tr("Reading the clipboard").to_string(),
+            Call::FindFiles { query, .. } => trf("Finding files named “{query}”", &[("query", query)]),
+            Call::ReadFile { path } => trf("Reading {file}", &[("file", &file_name(path))]),
+            Call::OpenFile { path, app: Some(a) } => trf("Opening {file} in {app}", &[("file", &file_name(path)), ("app", a)]),
+            Call::OpenFile { path, .. } => trf("Opening {name}", &[("name", &file_name(path))]),
+            Call::MoveFiles { paths, to } => trf("Move {items} to {dest}", &[("items", &items(paths)), ("dest", &file_name(to))]),
+            Call::RenameFile { path, name } => trf("Rename {file} to {name}", &[("file", &file_name(path)), ("name", name)]),
+            Call::TrashFiles { paths } => trf("Move {items} to the Trash", &[("items", &items(paths))]),
+            Call::NewFolder { parent, name } => trf("New folder “{name}” in {parent}", &[("name", name), ("parent", &file_name(parent))]),
+            Call::Remember { text } => trf("Remembering: {text}", &[("text", text)]),
+            Call::Forget { text } => trf("Forgetting “{text}”", &[("text", text)]),
+            Call::SaveRoutine { name, steps } => trf("Save the routine “{name}”: {steps}", &[("name", name), ("steps", &steps.iter().map(crate::routines::label).collect::<Vec<_>>().join(", "))]),
         };
         crate::agents::clip(&s, 140)
     }
@@ -274,7 +282,7 @@ fn file_name(p: &str) -> String {
 fn items(paths: &[String]) -> String {
     match paths {
         [one] => file_name(one),
-        many => format!("{} items", many.len()),
+        many => crate::i18n::trf("{count} items", &[("count", &many.len().to_string())]),
     }
 }
 

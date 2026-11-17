@@ -41,11 +41,11 @@ impl Adapter for Codex {
             "item.started" => match item_type? {
                 "command_execution" => {
                     let cmd = item?.get("command").and_then(Value::as_str).unwrap_or("a command");
-                    Some(AgentEvent::Status { text: clip(&format!("Running: {cmd}"), 80) })
+                    Some(AgentEvent::Status { text: clip(&crate::i18n::trf("Running: {command}", &[("command", cmd)]), 80) })
                 }
-                "file_change" => Some(AgentEvent::Status { text: "Editing files".into() }),
+                "file_change" => Some(AgentEvent::Status { text: crate::i18n::tr("Editing files").into() }),
                 "reasoning" => Some(AgentEvent::Status { text: "Thinking".into() }),
-                "web_search" => Some(AgentEvent::Status { text: "Searching the web".into() }),
+                "web_search" => Some(AgentEvent::Status { text: crate::i18n::tr("Searching the web").into() }),
                 _ => None,
             },
             "item.completed" => {
@@ -73,10 +73,10 @@ impl Adapter for Codex {
 
 fn friendly_error(m: &str) -> String {
     if m.contains("401") || m.contains("Unauthorized") {
-        return "Codex isn't signed in: run `codex login` in a terminal".into();
+        return crate::i18n::tr("Codex isn't signed in: run `codex login` in a terminal").into();
     }
     if m.contains("429") || m.to_lowercase().contains("rate limit") {
-        return "Codex is rate limited; try again shortly".into();
+        return crate::i18n::tr("Codex is rate limited; try again shortly").into();
     }
     clip(m, 160)
 }
