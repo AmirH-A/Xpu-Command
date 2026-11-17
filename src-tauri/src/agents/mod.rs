@@ -189,6 +189,41 @@ pub fn name(kind: AgentKind) -> &'static str {
     }
 }
 
+/// One answer from Claude Code with no tools at all: `claude -p` with every built-in tool off, no MCP
+/// servers, no user or project settings, run in the private empty workspace. For small text jobs.
+pub async fn complete(bin: &Path, input: &str, system_prompt: &str, model: &str, profile: Option<&Path>, timeout: std::time::Duration) -> Result<String> {
+    let mut cmd = tokio::process::Command::new(bin);
+    cmd.args(["-p", "--output-format", "json", "--model", model, "--tools", "", "--restricted", "--strict-mcp-config", "--system-prompt", system_prompt])
+        .current_dir(crate::mac::workspace()?)
+        .env("PATH", child_path(bin))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    if let Some(dir) = profile {
+        cmd.env("CLAUDE_CONFIG_DIR", dir);
+    }
+    let mut child = {
+        let _guard = SPAWN_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        cmd.spawn().map_err(|e| msg(format!("could not start Claude Code: {e}")))?
+    };
+    let mut stdin = child.stdin.take().ok_or_else(|| msg("no stdin"))?;
+    stdin.write_all(input.as_bytes()).await?;
+    drop(stdin);
+    let out = tokio::time::timeout(timeout, child.wait_with_output()).await.map_err(|_| msg("Claude Code took too long"))??;
+    parse_complete(&String::from_utf8_lossy(&out.stdout))
+}
+
+/// The answer from `claude -p --output-format json`.
+fn parse_complete(stdout: &str) -> Result<String> {
+    let v: serde_json::Value = stdout.lines().rev().find_map(|l| serde_json::from_str(l).ok()).ok_or_else(|| msg("Claude Code gave no answer"))?;
+    let text = v.get("result").and_then(serde_json::Value::as_str).unwrap_or("");
+    if v.get("is_error").and_then(serde_json::Value::as_bool).unwrap_or(false) || v.get("subtype").and_then(serde_json::Value::as_str) != Some("success") {
+        return Err(msg(claude::friendly_error(if text.is_empty() { "Claude Code reported an error" } else { text })));
+    }
+    Ok(text.to_string())
+}
+
 /// `start` with an explicit binary (tests use a fake agent).
 pub fn start_with(bin: &Path, req: Request<'_>) -> Result<Run> {
     let project = crate::settings::validate_project_dir(req.project)?;
@@ -497,5 +532,20 @@ echo 'Tests pass.'"#,
         let home = dirs::home_dir().unwrap();
         assert!(start_with(&bin, req(&home, None, Duration::from_secs(1))).is_err(), "never the whole home folder");
         assert!(start_with(&bin, req(Path::new("/"), None, Duration::from_secs(1))).is_err());
+    }
+
+    #[tokio::test]
+    async fn complete_runs_without_tools_and_reads_the_answer() {
+        let script = r#"args="$*"; input=$(cat)
+case "$args" in *"--tools  --restricted --strict-mcp-config"*) ;; *) echo '{"type":"result","subtype":"success","is_error":false,"result":"WRONG ARGS"}'; exit 0;; esac
+case "$input" in *"<text>"*) echo '{"type":"result","subtype":"success","is_error":false,"result":"Shorter text."}';; *) echo nothing;; esac"#;
+        let (_f, bin, _) = fixture(script);
+        let got = complete(&bin, "<text>\nlong text\n</text>", "SP", "haiku", None, Duration::from_secs(10)).await.unwrap();
+        assert_eq!(got, "Shorter text.");
+        let (_f, bin, _) = fixture(r#"cat >/dev/null; echo '{"type":"result","subtype":"success","is_error":true,"result":"Failed to authenticate. API Error: 401"}'"#);
+        let e = complete(&bin, "x", "SP", "haiku", None, Duration::from_secs(10)).await.unwrap_err().to_string();
+        assert!(e.contains("isn't signed in"), "{e}");
+        let (_f, bin, _) = fixture("cat >/dev/null; sleep 30");
+        assert!(complete(&bin, "x", "SP", "haiku", None, Duration::from_millis(300)).await.is_err(), "a stuck run times out");
     }
 }

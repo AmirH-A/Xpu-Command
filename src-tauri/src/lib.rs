@@ -5,6 +5,7 @@ mod airpods;
 mod audio;
 mod commands;
 mod controller;
+mod dictation;
 mod cues;
 mod error;
 mod frame;

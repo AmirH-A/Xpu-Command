@@ -24,10 +24,20 @@ extern "C" {
     fn AXValueGetTypeID() -> CFTypeID;
     fn AXValueGetType(v: CFTypeRef) -> u32;
     fn AXValueGetValue(v: CFTypeRef, ty: u32, out: *mut c_void) -> bool;
+    fn AXValueCreate(ty: u32, value: *const c_void) -> CFTypeRef;
 }
 
 const AX_POINT: u32 = 1;
 const AX_SIZE: u32 = 2;
+const AX_RANGE: u32 = 4;
+
+/// A text range, in UTF-16 code units (CFRange).
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct CfRange {
+    location: isize,
+    length: isize,
+}
 
 /// An accessibility element (a window, a button, a text field…) of some app. Reference counted by
 /// Core Foundation; the AX API may be called from any thread.
@@ -45,6 +55,8 @@ pub enum V {
     El(El),
     Point(f64, f64),
     Size(f64, f64),
+    /// A text range: start and length in UTF-16 code units.
+    Range(usize, usize),
     None,
 }
 
@@ -68,6 +80,11 @@ pub fn focused_pid() -> Option<i32> {
         V::El(e) => e.pid(),
         _ => None,
     }
+}
+
+/// The element with keyboard focus, in whatever app is in front.
+pub fn focused_element() -> Option<El> {
+    system_wide().element("AXFocusedUIElement")
 }
 
 /// The element at a screen point (in points, top-left origin), whatever app owns it.
@@ -110,6 +127,14 @@ fn decode(v: CFType) -> V {
                 AX_SIZE => {
                     let mut s = core_graphics::geometry::CGSize::new(0.0, 0.0);
                     if AXValueGetValue(raw, AX_SIZE, &mut s as *mut _ as *mut c_void) { V::Size(s.width, s.height) } else { V::None }
+                }
+                AX_RANGE => {
+                    let mut r = CfRange { location: 0, length: 0 };
+                    if AXValueGetValue(raw, AX_RANGE, &mut r as *mut _ as *mut c_void) && r.location >= 0 && r.length >= 0 {
+                        V::Range(r.location as usize, r.length as usize)
+                    } else {
+                        V::None
+                    }
                 }
                 _ => V::None,
             }
@@ -215,6 +240,29 @@ impl El {
 
     pub fn perform(&self, action: &str) -> Result<(), String> {
         let r = unsafe { AXUIElementPerformAction(self.raw(), cfstr(action).as_CFTypeRef()) };
+        if r == 0 { Ok(()) } else { Err(ax_error(r)) }
+    }
+
+    pub fn range(&self, name: &str) -> Option<(usize, usize)> {
+        match self.attr(name) {
+            V::Range(start, len) => Some((start, len)),
+            _ => None,
+        }
+    }
+
+    pub fn set_range(&self, name: &str, start: usize, len: usize) -> Result<(), String> {
+        let r = CfRange { location: start as isize, length: len as isize };
+        let v = unsafe { AXValueCreate(AX_RANGE, &r as *const _ as *const c_void) };
+        if v.is_null() {
+            return Err("could not make a text range".into());
+        }
+        let v = unsafe { CFType::wrap_under_create_rule(v) };
+        let r = unsafe { AXUIElementSetAttributeValue(self.raw(), cfstr(name).as_CFTypeRef(), v.as_CFTypeRef()) };
+        if r == 0 { Ok(()) } else { Err(ax_error(r)) }
+    }
+
+    pub fn set_string(&self, name: &str, v: &str) -> Result<(), String> {
+        let r = unsafe { AXUIElementSetAttributeValue(self.raw(), cfstr(name).as_CFTypeRef(), cfstr(v).as_CFTypeRef()) };
         if r == 0 { Ok(()) } else { Err(ax_error(r)) }
     }
 

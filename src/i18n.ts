@@ -63,6 +63,9 @@ const EN = [
   "Find, read, open, move, rename and trash files in your home folder (never hidden folders or Library).",
   "Automatic",
   "Automatic uses Haiku for quick requests and Sonnet inside apps.",
+  "Polish my dictation",
+  "Removes “um”s, fixes punctuation, and fits the app: chat, email or code.",
+  "Then say “make that shorter”, “more polite”, “in Spanish” or “scratch that” to change what was just typed.",
 ] as const;
 
 type Same<T extends readonly unknown[]> = { readonly [K in keyof T]: string };
@@ -121,6 +124,9 @@ const FA: Tr = [
   "پیدا کردن، خواندن، باز کردن، جابه‌جا کردن، تغییر نام و انداختن فایل‌ها در سطل زباله، در پوشهٔ خانه (هرگز پوشه‌های پنهان یا Library).",
   "خودکار",
   "حالت خودکار برای درخواست‌های سریع Haiku و برای کار داخل برنامه‌ها Sonnet را انتخاب می‌کند.",
+  "مرتب‌کردن متن گفته‌شده",
+  "«اِم»ها را حذف می‌کند، نشانه‌گذاری را درست می‌کند و متن را با برنامه هماهنگ می‌کند: چت، ایمیل یا کد.",
+  "بعد بگویید «کوتاه‌ترش کن»، «مودبانه‌ترش کن»، «به انگلیسی» یا «پاکش کن» تا متنی که تازه تایپ شد تغییر کند.",
 ];
 
 const ES: Tr = [
@@ -176,6 +182,9 @@ const ES: Tr = [
   "Buscar, leer, abrir, mover, renombrar y enviar a la papelera archivos de tu carpeta de inicio (nunca carpetas ocultas ni Library).",
   "Automático",
   "Automático usa Haiku para peticiones rápidas y Sonnet dentro de las apps.",
+  "Pulir mi dictado",
+  "Quita los «eh», corrige la puntuación y se adapta a la app: chat, correo o código.",
+  "Luego di «hazlo más corto», «más formal», «en inglés» o «borra eso» para cambiar lo que se acaba de escribir.",
 ];
 
 const DE: Tr = [
@@ -231,6 +240,9 @@ const DE: Tr = [
   "Dateien in deinem Benutzerordner finden, lesen, öffnen, verschieben, umbenennen und in den Papierkorb legen (nie versteckte Ordner oder Library).",
   "Automatisch",
   "Automatisch nutzt Haiku für schnelle Anfragen und Sonnet innerhalb von Apps.",
+  "Diktat glätten",
+  "Entfernt „äh“s, korrigiert die Zeichensetzung und passt sich der App an: Chat, E-Mail oder Code.",
+  "Sag danach „mach das kürzer“, „förmlicher“, „auf Englisch“ oder „lösch das“, um das gerade Getippte zu ändern.",
 ];
 
 const FR: Tr = [
@@ -286,6 +298,9 @@ const FR: Tr = [
   "Trouver, lire, ouvrir, déplacer, renommer et mettre à la corbeille les fichiers de votre dossier personnel (jamais les dossiers cachés ni Library).",
   "Automatique",
   "Automatique utilise Haiku pour les demandes rapides et Sonnet dans les apps.",
+  "Peaufiner ma dictée",
+  "Supprime les « euh », corrige la ponctuation et s’adapte à l’app : chat, e-mail ou code.",
+  "Dites ensuite « plus court », « plus formel », « en anglais » ou « efface ça » pour modifier ce qui vient d’être tapé.",
 ];
 
 const AR: Tr = [
@@ -341,6 +356,9 @@ const AR: Tr = [
   "البحث عن الملفات في مجلد المنزل وقراءتها وفتحها ونقلها وإعادة تسميتها ونقلها إلى سلة المهملات (وليس المجلدات المخفية أو Library أبدًا).",
   "تلقائي",
   "الوضع التلقائي يستخدم Haiku للطلبات السريعة وSonnet داخل التطبيقات.",
+  "تحسين الإملاء",
+  "يحذف «أمم» ويصحح علامات الترقيم ويلائم التطبيق: دردشة أو بريد أو كود.",
+  "ثم قل «اجعله أقصر» أو «أكثر رسمية» أو «بالإنجليزية» أو «امسح ذلك» لتغيير ما كُتب للتو.",
 ];
 
 const ZH: Tr = [
@@ -396,6 +414,9 @@ const ZH: Tr = [
   "在你的个人文件夹中查找、读取、打开、移动、重命名文件并移到废纸篓（绝不涉及隐藏文件夹或 Library）。",
   "自动",
   "自动模式：快速请求用 Haiku，在应用内操作用 Sonnet。",
+  "润色我的听写",
+  "去掉“嗯”“呃”，修正标点，并适配当前应用：聊天、邮件或代码。",
+  "然后说“短一点”“正式一点”“翻译成英文”或“删掉”，即可修改刚输入的内容。",
 ];
 
 const JA: Tr = [
@@ -451,6 +472,9 @@ const JA: Tr = [
   "ホームフォルダ内のファイルを検索、読み取り、開く、移動、名前変更、ゴミ箱へ移動します（隠しフォルダやLibraryには触れません）。",
   "自動",
   "自動では、簡単な依頼に Haiku、アプリ内の操作に Sonnet を使います。",
+  "音声入力を整える",
+  "「えーと」を取り除き、句読点を直し、アプリに合わせます：チャット、メール、コード。",
+  "続けて「短くして」「丁寧にして」「英語に翻訳して」「消して」と言うと、今入力した文を直せます。",
 ];
 
 const TABLES: Record<Exclude<Lang, 'en'>, Tr> = { fa: FA, es: ES, de: DE, fr: FR, ar: AR, zh: ZH, ja: JA };

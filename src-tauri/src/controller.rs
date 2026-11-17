@@ -3,7 +3,7 @@ use crate::audio::{Captured, Recording};
 use crate::error::{msg, Error, Result};
 use crate::input::ButtonEvent;
 use crate::settings::{Delivery, Settings, SttEngine, TalkMode};
-use crate::{agents, inject, sanitize, speech, stt};
+use crate::{agents, dictation, inject, sanitize, speech, stt};
 use parking_lot::{Mutex, RwLock};
 use serde::Serialize;
 use std::sync::Arc;
@@ -51,6 +51,8 @@ struct Heard {
     quiet: bool,
 }
 const AGENT_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+/// "Make that shorter" edits the last dictation if it was typed within this time.
+const EDIT_WINDOW: Duration = Duration::from_secs(10 * 60);
 /// A Mac request is short: open, play, remind. Anything longer is stuck.
 const MAC_TIMEOUT: Duration = Duration::from_secs(300);
 /// A follow-up within this time continues the agent's conversation; later ones start fresh.
@@ -326,6 +328,8 @@ pub struct Controller {
     generation: std::sync::atomic::AtomicU64,
     tray_live: std::sync::atomic::AtomicBool,
     timing: Mutex<Option<Timing>>,
+    /// The last dictation typed, for spoken edits ("scratch that", "make that shorter").
+    typed: Mutex<Option<inject::Typed>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -349,6 +353,7 @@ impl Controller {
             generation: Default::default(),
             tray_live: std::sync::atomic::AtomicBool::new(false),
             timing: Mutex::new(None),
+            typed: Mutex::new(None),
         }
     }
 
@@ -671,18 +676,7 @@ impl Controller {
             }
         }
         match s.delivery {
-            Delivery::TypeIntoFocused => {
-                self.overlay(app, Phase::Typing, &text, None);
-                let (t, submit) = (text.clone(), s.auto_submit);
-                let (tx, rx) = tokio::sync::oneshot::channel();
-                app.run_on_main_thread(move || {
-                    let _ = tx.send(inject::type_text(&t, submit));
-                })
-                .map_err(|e| msg(e.to_string()))?;
-                rx.await.map_err(|_| msg("typing was interrupted"))??;
-                self.record_timing("Typed");
-                self.hide_later(app, Duration::from_millis(700));
-            }
+            Delivery::TypeIntoFocused => self.dictate(app, &s, text).await?,
             Delivery::Agent => self.run_agent(app, &s, &text).await?,
             Delivery::ControlMac => {
                 if s.instant && self.try_instant(app, &s, &text).await {
@@ -692,6 +686,70 @@ impl Controller {
             }
         }
         Ok(())
+    }
+
+    /// Types a dictation into the app in front, polished for that app; or, if it is a spoken edit
+    /// ("make that shorter", "scratch that") of the last dictation there, applies it.
+    async fn dictate(self: &Arc<Self>, app: &AppHandle, s: &Settings, text: String) -> Result<()> {
+        let (pid, bundle) = front_app();
+        let style = bundle.as_deref().map_or(dictation::Style::Prose, dictation::style_for);
+        let last = self.typed.lock().clone().filter(|t| Some(t.pid) == pid && t.at.elapsed() < EDIT_WINDOW);
+        if let (Some(edit), Some(last)) = (dictation::edit_command(&text), last.clone()) {
+            return self.edit_typed(app, s, last, edit, style).await;
+        }
+        let shown = if s.polish { dictation::polish(&text, style) } else { text };
+        if shown.is_empty() {
+            self.overlay(app, Phase::Hidden, "", None);
+            return Ok(());
+        }
+        self.overlay(app, Phase::Typing, &shown, None);
+        let typed = self.on_main(app, {
+            let (t, submit) = (shown.clone(), s.auto_submit);
+            move || inject::type_after(&t, submit, last.as_ref())
+        })
+        .await?;
+        *self.typed.lock() = match pid {
+            Some(pid) if !s.auto_submit => Some(inject::Typed { text: typed.trim_start().to_string(), pid, at: Instant::now() }),
+            _ => None,
+        };
+        self.record_timing("Typed");
+        self.hide_later(app, Duration::from_millis(700));
+        Ok(())
+    }
+
+    async fn edit_typed(self: &Arc<Self>, app: &AppHandle, s: &Settings, last: inject::Typed, edit: dictation::Edit, style: dictation::Style) -> Result<()> {
+        let new = match edit {
+            dictation::Edit::Delete => String::new(),
+            dictation::Edit::Rewrite(how) => {
+                self.overlay(app, Phase::Working, "Rewriting…", Some("Dictation"));
+                let profile = s.claude_profile.as_deref().map(crate::settings::claude_profile_dir).transpose()?;
+                let out = dictation::rewrite(&last.text, &how, profile.as_deref()).await?;
+                if s.polish { dictation::polish(&out, style) } else { out }
+            }
+        };
+        let fix = (last.clone(), new.clone());
+        self.on_main(app, move || inject::replace_typed(&fix.0, &fix.1)).await?;
+        crate::activity::record("dictation", if new.is_empty() { "Removed the last dictation" } else { "Rewrote the last dictation" }, crate::mac::server::Outcome::Done, "");
+        *self.typed.lock() = (!new.is_empty()).then(|| inject::Typed { text: new.clone(), pid: last.pid, at: Instant::now() });
+        self.record_timing("Edit");
+        if new.is_empty() {
+            self.overlay(app, Phase::Done, "Removed it", Some("Dictation"));
+            self.hide_later(app, Duration::from_millis(1200));
+        } else {
+            self.overlay(app, Phase::Done, &new, Some("Dictation"));
+            self.hide_later(app, Duration::from_secs(3));
+        }
+        Ok(())
+    }
+
+    /// Runs `f` on the main thread (keyboard and Accessibility calls) and waits for its result.
+    async fn on_main<T: Send + 'static>(&self, app: &AppHandle, f: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        app.run_on_main_thread(move || {
+            let _ = tx.send(f());
+        })
+        .map_err(|e| msg(e.to_string()))?;
+        rx.await.map_err(|_| msg("typing was interrupted"))?
     }
 
     /// Speech to text with the configured engine; the result is cleaned for display and use.
@@ -1046,6 +1104,18 @@ impl Controller {
             }
         });
     }
+}
+
+/// The app in front (its process and bundle id), where a dictation will be typed.
+#[cfg(target_os = "macos")]
+fn front_app() -> (Option<i32>, Option<String>) {
+    let pid = crate::mac::ui::front_pid().filter(|p| *p != std::process::id() as i32);
+    (pid, pid.and_then(crate::mac::ui::app_of_pid).map(|a| a.bundle))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn front_app() -> (Option<i32>, Option<String>) {
+    (None, None)
 }
 
 /// Bottom-center of the monitor the cursor is on.

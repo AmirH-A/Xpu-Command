@@ -125,6 +125,8 @@ pub struct Settings {
     pub speak_summary: bool,
     /// Mode A only: press Enter after typing. Off by default: in a terminal, Enter runs the line.
     pub auto_submit: bool,
+    /// Mode A: clean what is typed (fillers, punctuation) in the style of the app it goes into.
+    pub polish: bool,
     pub max_record_seconds: u32,
     /// Microphone by name; None = system default. Useful to talk into the laptop mic while
     /// listening on Bluetooth headphones (their mic switches them to low-quality call audio).
@@ -172,6 +174,7 @@ impl Default for Settings {
             safety: Safety::AskCommands,
             speak_summary: true,
             auto_submit: false,
+            polish: true,
             max_record_seconds: 120,
             input_device: None,
             claude_profile: None,
