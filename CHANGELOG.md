@@ -2,7 +2,7 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
-## Unreleased
+## 0.9.1 (2026-11-17)
 
 ### Changed
 - **Asks far less.** Naming an app in your request ("reply in Slack", "open Notes and…") allows it for that request without a question; so does "this" or "here" for the app in front, and mentioning a file or folder for Your files. Terminals, password managers and system settings are never allowed this way.
