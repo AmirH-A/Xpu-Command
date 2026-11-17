@@ -108,6 +108,8 @@ pub struct Settings {
     pub text_size: TextSize,
     pub tutorial_done: bool,
     pub ui_language: String,
+    /// Say "Hey Xpu" to talk: the microphone stays on, checked on this Mac. Off by default.
+    pub wake_word: bool,
     /// Press AirPods (or any headset play button) to talk.
     #[serde(alias = "airpods_press", deserialize_with = "airpods_on")]
     pub airpods: bool,
@@ -161,6 +163,7 @@ impl Default for Settings {
             text_size: TextSize::Normal,
             tutorial_done: false,
             ui_language: "system".into(),
+            wake_word: false,
             airpods: false,
             conversation: true,
             memory: true,
@@ -349,6 +352,7 @@ mod tests {
         let s = Settings::default();
         assert_eq!(s.stt, SttEngine::Local, "audio stays on the machine by default");
         assert!(!s.auto_submit, "never press Enter by default");
+        assert!(!s.wake_word, "the microphone isn't always on unless the user turns it on");
         assert_eq!(s.safety, Safety::AskCommands, "commands need the user's yes by default");
         s.validate().unwrap();
     }

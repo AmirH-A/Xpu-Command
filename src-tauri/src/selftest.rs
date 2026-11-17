@@ -1,5 +1,6 @@
 //! Debug builds only: run the pipeline without the GUI.
 //!   xpu-command --selftest-stt <file.wav> [model]       transcribe a 16-bit PCM WAV with the local engine
+//!   xpu-command --selftest-wake <model> <lang> <file.wav>…  what the wake-phrase check hears in each file
 //!   xpu-command --selftest-agent <claude|codex> <dir> <prompt…>   run an agent headless, print events
 //!   xpu-command --selftest-mac-tool <tool> '<json>'    validate and run one Mac tool directly (no model, no gate)
 //!   xpu-command --selftest-mac-tools '[["tool",{…}],…]' several tools in one session (no gate)
@@ -21,6 +22,15 @@ pub fn maybe_run() -> bool {
                     eprintln!("error: {e}");
                     std::process::exit(1);
                 }
+            }
+            true
+        }
+        Some("--selftest-wake") => {
+            let engine = stt::LocalEngine::default();
+            for path in &args[4..] {
+                let audio = audio::Captured(read_wav_16k(path).unwrap_or_default());
+                let text = engine.transcribe(&args[2], &stt::Request { audio: &audio, language: &args[3], vocabulary: crate::wake::PROMPT }).map(|t| sanitize::clean_transcript(&t));
+                println!("{path}: {text:?} → {:?}", text.as_deref().ok().and_then(crate::wake::heard));
             }
             true
         }

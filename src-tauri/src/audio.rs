@@ -42,6 +42,16 @@ impl Recording {
     /// Starts capturing from the default input device. `level` gets ~20 RMS updates per second.
     /// `device`: an input device name from `input_devices()`, or None for the system default.
     pub fn start(device: Option<&str>, max_seconds: u32, level: impl Fn(f32) + Send + Sync + 'static) -> Result<Recording> {
+        Self::open(device, max_seconds, false, level)
+    }
+
+    /// Listens without end, keeping only the last `keep_seconds` (older audio is zeroed and dropped).
+    /// For the wake phrase: read with `snapshot`.
+    pub fn listen(device: Option<&str>, keep_seconds: u32, level: impl Fn(f32) + Send + Sync + 'static) -> Result<Recording> {
+        Self::open(device, keep_seconds, true, level)
+    }
+
+    fn open(device: Option<&str>, max_seconds: u32, ring: bool, level: impl Fn(f32) + Send + Sync + 'static) -> Result<Recording> {
         let wanted = device.map(str::to_string);
         let stop = Arc::new(AtomicBool::new(false));
         let stop2 = stop.clone();
@@ -74,14 +84,18 @@ impl Recording {
             let mut since_level = 0usize;
             let mut push = move |mono: &mut dyn Iterator<Item = f32>| {
                 let mut b = b2.lock();
-                let start = b.len();
+                let mut added = 0usize;
                 for s in mono {
                     if b.len() >= max_samples {
-                        break;
+                        if !ring {
+                            break;
+                        }
+                        drop_oldest(&mut b, rate as usize / 2);
                     }
                     b.push(s);
+                    added += 1;
                 }
-                since_level += b.len() - start;
+                since_level += added;
                 if since_level >= rate as usize / 20 {
                     let tail = &b[b.len().saturating_sub(since_level)..];
                     let rms = (tail.iter().map(|x| x * x).sum::<f32>() / tail.len().max(1) as f32).sqrt();
@@ -152,6 +166,15 @@ impl Drop for Recording {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
     }
+}
+
+/// Removes the oldest `n` samples and zeroes the memory they leave behind.
+fn drop_oldest(b: &mut Vec<f32>, n: usize) {
+    let n = n.min(b.len());
+    let keep = b.len() - n;
+    b.copy_within(n.., 0);
+    b[keep..].zeroize();
+    b.truncate(keep);
 }
 
 fn avg(c: &[f32]) -> f32 {
@@ -225,6 +248,18 @@ mod tests {
         assert_eq!(out.len(), TARGET_RATE as usize, "one second stays one second");
         let rms = (out[2000..14000].iter().map(|x| x * x).sum::<f32>() / 12000.0).sqrt();
         assert!((rms - 0.5 / 2f32.sqrt()).abs() < 0.03, "a 440 Hz tone keeps its level, rms {rms}");
+    }
+
+    #[test]
+    fn the_ring_keeps_the_newest_and_zeroes_the_rest() {
+        let mut b: Vec<f32> = (1..=10).map(|i| i as f32).collect();
+        let base = b.as_ptr();
+        drop_oldest(&mut b, 4);
+        assert_eq!(b, [5.0, 6.0, 7.0, 8.0, 9.0, 10.0]);
+        let spare = unsafe { std::slice::from_raw_parts(base.add(6), 4) };
+        assert!(spare.iter().all(|x| *x == 0.0), "dropped audio doesn't linger in memory");
+        drop_oldest(&mut b, 100);
+        assert!(b.is_empty());
     }
 
     #[test]

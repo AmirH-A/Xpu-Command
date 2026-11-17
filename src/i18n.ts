@@ -66,6 +66,9 @@ const EN = [
   "Polish my dictation",
   "Removes “um”s, fixes punctuation, and fits the app: chat, email or code.",
   "Then say “make that shorter”, “more polite”, “in Spanish” or “scratch that” to change what was just typed.",
+  "“Hey Xpu”",
+  "Say it, then your request. Checked on this Mac; the microphone stays on while this is on.",
+  "“Hey Xpu” is not listening:",
 ] as const;
 
 type Same<T extends readonly unknown[]> = { readonly [K in keyof T]: string };
@@ -127,6 +130,9 @@ const FA: Tr = [
   "مرتب‌کردن متن گفته‌شده",
   "«اِم»ها را حذف می‌کند، نشانه‌گذاری را درست می‌کند و متن را با برنامه هماهنگ می‌کند: چت، ایمیل یا کد.",
   "بعد بگویید «کوتاه‌ترش کن»، «مودبانه‌ترش کن»، «به انگلیسی» یا «پاکش کن» تا متنی که تازه تایپ شد تغییر کند.",
+  "«Hey Xpu»",
+  "اول بگویید، بعد درخواستتان را. روی همین مک بررسی می‌شود؛ تا وقتی روشن است، میکروفون روشن می‌ماند.",
+  "«Hey Xpu» گوش نمی‌دهد:",
 ];
 
 const ES: Tr = [
@@ -185,6 +191,9 @@ const ES: Tr = [
   "Pulir mi dictado",
   "Quita los «eh», corrige la puntuación y se adapta a la app: chat, correo o código.",
   "Luego di «hazlo más corto», «más formal», «en inglés» o «borra eso» para cambiar lo que se acaba de escribir.",
+  "«Hey Xpu»",
+  "Dilo y luego tu petición. Se comprueba en este Mac; el micrófono sigue activo mientras esté encendido.",
+  "«Hey Xpu» no está escuchando:",
 ];
 
 const DE: Tr = [
@@ -243,6 +252,9 @@ const DE: Tr = [
   "Diktat glätten",
   "Entfernt „äh“s, korrigiert die Zeichensetzung und passt sich der App an: Chat, E-Mail oder Code.",
   "Sag danach „mach das kürzer“, „förmlicher“, „auf Englisch“ oder „lösch das“, um das gerade Getippte zu ändern.",
+  "„Hey Xpu“",
+  "Sag es, dann deine Anfrage. Wird auf diesem Mac geprüft; das Mikrofon bleibt an, solange das an ist.",
+  "„Hey Xpu“ hört nicht zu:",
 ];
 
 const FR: Tr = [
@@ -301,6 +313,9 @@ const FR: Tr = [
   "Peaufiner ma dictée",
   "Supprime les « euh », corrige la ponctuation et s’adapte à l’app : chat, e-mail ou code.",
   "Dites ensuite « plus court », « plus formel », « en anglais » ou « efface ça » pour modifier ce qui vient d’être tapé.",
+  "« Hey Xpu »",
+  "Dites-le, puis votre demande. Vérifié sur ce Mac ; le micro reste allumé tant que c’est activé.",
+  "« Hey Xpu » n’écoute pas :",
 ];
 
 const AR: Tr = [
@@ -359,6 +374,9 @@ const AR: Tr = [
   "تحسين الإملاء",
   "يحذف «أمم» ويصحح علامات الترقيم ويلائم التطبيق: دردشة أو بريد أو كود.",
   "ثم قل «اجعله أقصر» أو «أكثر رسمية» أو «بالإنجليزية» أو «امسح ذلك» لتغيير ما كُتب للتو.",
+  "«Hey Xpu»",
+  "قلها ثم طلبك. يتم التحقق على هذا الماك؛ يبقى الميكروفون مفتوحًا ما دام هذا مفعّلًا.",
+  "«Hey Xpu» لا يستمع:",
 ];
 
 const ZH: Tr = [
@@ -417,6 +435,9 @@ const ZH: Tr = [
   "润色我的听写",
   "去掉“嗯”“呃”，修正标点，并适配当前应用：聊天、邮件或代码。",
   "然后说“短一点”“正式一点”“翻译成英文”或“删掉”，即可修改刚输入的内容。",
+  "“Hey Xpu”",
+  "先说它，再说你的请求。在这台 Mac 上识别；开启期间麦克风保持打开。",
+  "“Hey Xpu”未在聆听：",
 ];
 
 const JA: Tr = [
@@ -475,6 +496,9 @@ const JA: Tr = [
   "音声入力を整える",
   "「えーと」を取り除き、句読点を直し、アプリに合わせます：チャット、メール、コード。",
   "続けて「短くして」「丁寧にして」「英語に翻訳して」「消して」と言うと、今入力した文を直せます。",
+  "「Hey Xpu」",
+  "これに続けて依頼を話します。この Mac 上で判定し、オンの間はマイクがオンのままです。",
+  "「Hey Xpu」は聞き取りできません：",
 ];
 
 const TABLES: Record<Exclude<Lang, 'en'>, Tr> = { fa: FA, es: ES, de: DE, fr: FR, ar: AR, zh: ZH, ja: JA };

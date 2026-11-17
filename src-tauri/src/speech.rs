@@ -8,6 +8,26 @@ use std::time::{Duration, Instant};
 type Job = (String, Option<tokio::sync::oneshot::Sender<()>>);
 static TX: OnceLock<Sender<Job>> = OnceLock::new();
 static LANGUAGE: parking_lot::Mutex<String> = parking_lot::Mutex::new(String::new());
+/// Until when our own voice may be playing (so the wake phrase doesn't listen to it).
+static SPEAKING_UNTIL: parking_lot::Mutex<Option<Instant>> = parking_lot::Mutex::new(None);
+
+/// True while the app is (probably) speaking, plus a short tail for the room's echo.
+pub fn speaking() -> bool {
+    SPEAKING_UNTIL.lock().is_some_and(|t| Instant::now() < t)
+}
+
+fn mark_speaking(text: &str) {
+    let until = Instant::now() + estimate(text) + Duration::from_millis(600);
+    let mut slot = SPEAKING_UNTIL.lock();
+    if slot.map_or(true, |t| t < until) {
+        *slot = Some(until);
+    }
+}
+
+/// How long speaking `text` takes at most.
+fn estimate(text: &str) -> Duration {
+    Duration::from_millis(1500 + 90 * text.chars().count() as u64).min(Duration::from_secs(60))
+}
 
 pub fn set_language(code: &str) {
     *LANGUAGE.lock() = code.to_string();
@@ -72,7 +92,7 @@ fn queue() -> &'static Sender<Job> {
                     }
                     current = want;
                 }
-                let max = Duration::from_millis(1500 + 90 * text.chars().count() as u64).min(Duration::from_secs(60));
+                let max = estimate(&text);
                 if let Err(e) = tts.speak(text, true) {
                     log::warn!("text-to-speech failed: {e}");
                 } else if done.is_some() {
@@ -95,6 +115,7 @@ pub fn speak(text: String) {
     if !has_voice_for(&text) {
         return;
     }
+    mark_speaking(&text);
     let _ = queue().send((text, None));
 }
 
@@ -104,8 +125,10 @@ pub async fn speak_and_wait(text: String) {
         return;
     }
     let (tx, rx) = tokio::sync::oneshot::channel();
+    mark_speaking(&text);
     if queue().send((text, Some(tx))).is_ok() {
         let _ = rx.await;
+        *SPEAKING_UNTIL.lock() = Some(Instant::now() + Duration::from_millis(600));
     }
 }
 

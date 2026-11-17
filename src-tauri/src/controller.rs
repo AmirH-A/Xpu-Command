@@ -32,6 +32,8 @@ enum Trigger {
     /// Opened by the app after an agent's answer: ends when the user stops talking; silence
     /// closes it quietly.
     Reply,
+    /// After "Hey Xpu": ends when the user stops talking.
+    Wake,
 }
 
 struct Rec {
@@ -425,7 +427,7 @@ impl Controller {
             let s = self.settings.read();
             (s.max_record_seconds, s.input_device.clone(), s.auto_stop, s.sound_cues)
         };
-        let auto = (auto_stop && trigger != Trigger::Hold) || trigger == Trigger::Reply;
+        let auto = (auto_stop && trigger != Trigger::Hold) || matches!(trigger, Trigger::Reply | Trigger::Wake);
         let id = self.rec_seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
         let vad = Arc::new(Mutex::new(crate::vad::Endpoint::default()));
         let (a, v, weak) = (app.clone(), vad.clone(), Arc::downgrade(self));
@@ -469,6 +471,7 @@ impl Controller {
                     (Trigger::Knock, false) => "Listening… knock twice to send",
                     (Trigger::Headset, true) => "Listening… pause or press your AirPods to send",
                     (Trigger::Headset, false) => "Listening… press your AirPods to send",
+                    (Trigger::Wake, _) => "Listening… pause to send",
                 };
                 self.overlay(app, Phase::Listening, hint, None);
             }
@@ -640,6 +643,12 @@ impl Controller {
             self.hide_later(app, Duration::from_secs(2));
             return Ok(());
         }
+        self.deliver(app, &s, text).await
+    }
+
+    /// Acts on what was said: a voice command, a routine, or the request itself (typed, to the
+    /// agent, or on the Mac).
+    async fn deliver(self: &Arc<Self>, app: &AppHandle, s: &Settings, text: String) -> Result<()> {
         if matches!(s.delivery, Delivery::Agent | Delivery::ControlMac) {
             match voice_command(&text) {
                 Some(VoiceCommand::Stop) => {
@@ -672,17 +681,17 @@ impl Controller {
         }
         if matches!(s.delivery, Delivery::Agent | Delivery::ControlMac) {
             if let Some(r) = crate::routines::match_spoken(&text, &crate::routines::list()).cloned() {
-                return self.run_routine(app, &s, r).await;
+                return self.run_routine(app, s, r).await;
             }
         }
         match s.delivery {
-            Delivery::TypeIntoFocused => self.dictate(app, &s, text).await?,
-            Delivery::Agent => self.run_agent(app, &s, &text).await?,
+            Delivery::TypeIntoFocused => self.dictate(app, s, text).await?,
+            Delivery::Agent => self.run_agent(app, s, &text).await?,
             Delivery::ControlMac => {
-                if s.instant && self.try_instant(app, &s, &text).await {
+                if s.instant && self.try_instant(app, s, &text).await {
                     return Ok(());
                 }
-                self.run_mac(app, &s, &text).await?
+                self.run_mac(app, s, &text).await?
             }
         }
         Ok(())
@@ -750,6 +759,39 @@ impl Controller {
         })
         .map_err(|e| msg(e.to_string()))?;
         rx.await.map_err(|_| msg("typing was interrupted"))?
+    }
+
+    /// Something else is using the microphone or waits for the user's answer.
+    pub fn busy(&self) -> bool {
+        self.recording.lock().is_some() || self.pending.lock().is_some()
+    }
+
+    /// Whisper on this Mac with the shared engine (blocking): for the wake phrase.
+    pub fn transcribe_local(&self, model: &str, language: &str, audio: &Captured, prompt: &str) -> Result<String> {
+        self.engine.transcribe(model, &stt::Request { audio, language, vocabulary: prompt })
+    }
+
+    /// "Hey Xpu" was heard. With a request in the same breath, it runs now; otherwise listening
+    /// starts for it.
+    pub fn on_wake(self: &Arc<Self>, app: &AppHandle, rest: String) {
+        if !self.hook.enabled.load(std::sync::atomic::Ordering::Relaxed) || self.busy() {
+            return;
+        }
+        if rest.split_whitespace().count() >= 2 || voice_command(&rest).is_some() {
+            if self.settings.read().sound_cues {
+                crate::cues::play(crate::cues::Cue::Send);
+            }
+            *self.timing.lock() = Some(Timing { ended: Instant::now(), text_ms: 0 });
+            let (this, app) = (self.clone(), app.clone());
+            tauri::async_runtime::spawn(async move {
+                let s = this.settings.read().clone();
+                if let Err(e) = this.deliver(&app, &s, rest).await {
+                    this.fail(&app, e);
+                }
+            });
+        } else {
+            self.start_recording(app, Trigger::Wake);
+        }
     }
 
     /// Speech to text with the configured engine; the result is cleaned for display and use.

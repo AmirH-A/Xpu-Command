@@ -25,6 +25,7 @@ mod settings;
 mod speech;
 mod stt;
 mod vad;
+mod wake;
 #[cfg(debug_assertions)]
 mod selftest;
 
@@ -82,6 +83,7 @@ pub fn run() {
             commands::input_devices,
             commands::claude_profiles,
             commands::knock_status,
+            commands::wake_status,
             commands::activity_recent,
             commands::app_access_list,
             commands::request_screen_recording,
@@ -196,6 +198,7 @@ pub fn run() {
             if ctl.settings.read().knock {
                 knock_start(app.handle(), &ctl);
             }
+            wake::start(app.handle(), &ctl);
 
             let (tx, rx) = std::sync::mpsc::channel();
             let handle = app.handle().clone();

@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { t, setLang, resolve, LANGS, lang } from './i18n';
 
 type Settings = {
-  button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; live_words: boolean; instant: boolean; text_size: 'normal' | 'large' | 'larger'; tutorial_done: boolean; ui_language: string; airpods: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
+  button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; live_words: boolean; instant: boolean; text_size: 'normal' | 'large' | 'larger'; tutorial_done: boolean; ui_language: string; wake_word: boolean; airpods: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
   delivery: 'type_into_focused' | 'agent' | 'control_mac'; agent: 'claude' | 'codex' | 'custom'; custom_agent: string | null; project_dir: string | null; safety: 'read_only' | 'edit' | 'ask_commands'; conversation: boolean; memory: boolean;
   speak_summary: boolean; auto_submit: boolean; polish: boolean; max_record_seconds: number; input_device: string | null; claude_profile: string | null; mac_model: 'auto' | 'haiku' | 'sonnet'; app_access: Record<string, Access>; allow_all_apps: boolean; step_by_step: boolean; share_context: boolean;
 };
@@ -44,7 +44,7 @@ type Access = 'off' | 'see' | 'control' | 'ask';
 type AppRow = { bundle: string; name: string; class: 'normal' | 'terminal' | 'excluded' };
 let appRows: AppRow[] = [];
 
-function bindCheck(key: 'auto_submit' | 'polish' | 'speak_summary' | 'knock' | 'allow_all_apps' | 'step_by_step' | 'share_context' | 'auto_stop' | 'sound_cues' | 'conversation' | 'memory' | 'live_words' | 'instant') {
+function bindCheck(key: 'auto_submit' | 'polish' | 'wake_word' | 'speak_summary' | 'knock' | 'allow_all_apps' | 'step_by_step' | 'share_context' | 'auto_stop' | 'sound_cues' | 'conversation' | 'memory' | 'live_words' | 'instant') {
   const el = $<HTMLInputElement>(key);
   el.checked = s[key];
   el.onchange = () => { s[key] = el.checked; render(); };
@@ -537,6 +537,9 @@ async function refreshStatus() {
   const knockErr = await invoke<string | null>('knock_status');
   $('knock-state').textContent = knockErr ? `Double knock is not available: ${knockErr}` : '';
   $('knock-state').className = `hint${knockErr ? ' warn' : ''}`;
+  const wakeErr = await invoke<string | null>('wake_status');
+  $('wake-state').textContent = wakeErr ? `${t('“Hey Xpu” is not listening:')} ${wakeErr}` : '';
+  $('wake-state').className = `hint${wakeErr ? ' warn' : ''}`;
   await refreshActivity();
   await quietly(refreshHealth);
   const agents = await invoke<AgentInfo[]>('agent_status');
@@ -595,6 +598,7 @@ async function init() {
   (['button', 'mode', 'knock_sensitivity', 'mac_model', 'local_model', 'agent', 'safety', 'text_size'] as const).forEach(bindSelect);
   bindCheck('auto_submit');
   bindCheck('polish');
+  bindCheck('wake_word');
   bindCheck('speak_summary');
   bindCheck('knock');
   bindCheck('auto_stop');

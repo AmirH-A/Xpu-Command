@@ -4,7 +4,7 @@ description = "The settings window's commands. Each validates its input in Rust.
 commands.allow = [
   "get_settings", "save_settings", "set_cloud_key", "clear_cloud_key", "has_cloud_key",
   "permission_status", "open_permission_settings", "model_status", "download_model",
-  "pick_project", "agent_status", "input_devices", "claude_profiles", "knock_status",
+  "pick_project", "agent_status", "input_devices", "claude_profiles", "knock_status", "wake_status",
   "activity_recent", "activity_clear", "app_access_list", "request_screen_recording",
   "request_microphone", "move_to_applications", "pick_custom_agent", "open_link",
   "health_check", "crash_pending", "crash_report", "crash_dismiss", "diagnostics_zip",

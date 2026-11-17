@@ -37,6 +37,7 @@ pub fn save_settings(app: AppHandle, ctl: Ctl, new: Settings) -> Result<Settings
     if new.knock {
         crate::knock_start(&app, ctl.inner());
     }
+    crate::wake::start(&app, ctl.inner());
     ctl.preload();
     Ok(new)
 }
@@ -223,6 +224,17 @@ pub async fn pick_custom_agent(app: AppHandle) -> Result<Option<String>> {
 #[tauri::command]
 pub fn claude_profiles() -> Vec<String> {
     settings::claude_profiles()
+}
+
+/// Why "Hey Xpu" isn't listening although it is on, if so. While Settings is open this is asked
+/// every few seconds, so a fixed problem (a model just downloaded) starts it again.
+#[tauri::command]
+pub fn wake_status(app: AppHandle, ctl: Ctl) -> Option<String> {
+    if !ctl.settings.read().wake_word {
+        return None;
+    }
+    crate::wake::start(&app, ctl.inner());
+    crate::wake::problem()
 }
 
 /// None when double knock works (or is off and untried); otherwise why it can't work here.
