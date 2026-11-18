@@ -42,7 +42,8 @@ pub fn schema() -> Value {
             },
             "required": ["steps"],
             "additionalProperties": false
-        }
+        },
+        "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false }
     })
 }
 

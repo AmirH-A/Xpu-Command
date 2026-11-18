@@ -296,7 +296,8 @@ pub fn schemas() -> Value {
         json!({
             "name": name,
             "description": desc,
-            "inputSchema": { "type": "object", "properties": props, "required": required, "additionalProperties": false }
+            "inputSchema": { "type": "object", "properties": props, "required": required, "additionalProperties": false },
+            "annotations": annotations(name)
         })
     };
     let player = json!({ "type": "string", "enum": ["music", "spotify"], "description": "Optional. Default: Spotify if it is installed, else Music." });
@@ -348,6 +349,28 @@ pub fn schemas() -> Value {
     ])
 }
 
+
+/// MCP tool annotations: hints for hosts to warn before a call. They describe the tool, not the
+/// gate: every change on the Mac still goes through App access and the user's yes where needed.
+/// - read-only: it only looks (nothing on the Mac changes);
+/// - destructive: it can lose or send something (quitting, deleting, a click or keys that might
+///   press Send or Delete, an arbitrary Shortcut);
+/// - idempotent: calling it again with the same arguments changes nothing more;
+/// - open world: it reaches the internet or acts in apps that do (pages, clicks in any app).
+pub fn annotations(tool: &str) -> Value {
+    let (read_only, destructive, idempotent, open_world) = match tool {
+        "list_apps" | "list_shortcuts" | "list_windows" | "read_window" | "screenshot" | "wait" | "read_clipboard" | "find_files" | "read_file" => (true, false, true, false),
+        "read_page" => (true, false, true, true),
+        "open_app" | "set_volume" | "dark_mode" | "open_file" | "copy_text" => (false, false, true, false),
+        "open_url" | "web_search" | "play_music" => (false, false, false, true),
+        "media" | "scroll" | "create_reminder" | "create_event" | "create_note" | "new_folder" | "move_files" | "rename_file" | "remember" | "save_routine" | "draft_email" => (false, false, false, false),
+        "quit_app" | "forget" => (false, true, true, false),
+        "trash_files" => (false, true, false, false),
+        "click" | "type_text" | "press_keys" | "choose_menu" | "click_at" | "drag" | "click_page" | "fill_page" | "run_shortcut" => (false, true, false, true),
+        _ => panic!("no annotations for tool {tool}"),
+    };
+    json!({ "readOnlyHint": read_only, "destructiveHint": destructive, "idempotentHint": idempotent, "openWorldHint": open_world })
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -875,6 +898,24 @@ mod tests {
     }
     fn p(tool: &str, v: Value) -> Result<Call, String> {
         parse(tool, &v, now())
+    }
+
+    #[test]
+    fn every_tool_declares_all_four_hints() {
+        let mut all = schemas().as_array().unwrap().clone();
+        all.push(crate::mac::plan::schema());
+        all.extend(crate::agents::approvals::schema().as_array().unwrap().iter().cloned());
+        assert!(all.len() > 40);
+        for t in &all {
+            let a = &t["annotations"];
+            for hint in ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"] {
+                assert!(a[hint].is_boolean(), "{}: {hint} missing", t["name"]);
+            }
+            assert!(!(a["readOnlyHint"] == true && a["destructiveHint"] == true), "{}: read-only can't be destructive", t["name"]);
+        }
+        let hint = |n: &str, h: &str| all.iter().find(|t| t["name"] == n).unwrap()["annotations"][h] == true;
+        assert!(hint("read_file", "readOnlyHint") && hint("trash_files", "destructiveHint") && hint("click", "destructiveHint"));
+        assert!(hint("read_page", "openWorldHint") && !hint("find_files", "openWorldHint"));
     }
 
     #[test]

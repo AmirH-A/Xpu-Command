@@ -160,7 +160,9 @@ pub fn schema() -> Value {
             "type": "object",
             "properties": { "tool_name": { "type": "string" }, "input": { "type": "object" }, "tool_use_id": { "type": "string" } },
             "required": ["tool_name", "input"]
-        }
+        },
+        // It only asks the user; an "always" answer is remembered, so it isn't read-only.
+        "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false }
     }])
 }
 
