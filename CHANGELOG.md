@@ -2,7 +2,7 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
-## Unreleased
+## 0.10.0 (2026-11-18)
 
 ### Added
 - **Linux.** Xpu Command runs on Linux (X11 and Wayland) with every feature: dictation fitted to the text around the cursor and editing by voice through AT-SPI, the talk button (an X11 grab, or the mouse itself on Wayland), the keyboard shortcut (the GlobalShortcuts portal on Wayland), local and cloud speech, agents, and "Control my computer" with the same tools, access settings, approvals and undo. Media, volume, dark mode, reminders, events, notes, email drafts, the Trash and shortcuts use their Linux counterparts. Packages: `.deb`, `.rpm` and AppImage. The window says "computer" instead of "Mac" in all 8 languages.

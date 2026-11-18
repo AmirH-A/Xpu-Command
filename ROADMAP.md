@@ -13,17 +13,19 @@ The same rules hold for everything below: every app and your files start Off, ri
 | **Right-click, drag, copy and wait** | Uses the mouse and clipboard like you do, and waits for pages to load | 0.8 |
 | **Your files** | Find (Spotlight), read (text, PDF, Word), open, move, rename, Trash and new folders in your home folder; all undoable; never hidden folders, Library, apps or scripts | 0.9 |
 | **Polished dictation** | Removes fillers, fixes punctuation and fits the app you're in (chat, email, code); "make that shorter", "more polite", "in Spanish", "scratch that" edit what you just said | 0.9 |
-| **Your words, snippets and History** | A personal dictionary and replacements the speech model listens for, fixes it learns from your corrections, voice snippets, and every dictation kept on your Mac | next |
-| **Edit any text by voice** | Select text in any app and say "make this more formal", "shorter" or "in Spanish" | next |
-| **Faster, better speech** | Large v3 Turbo for every language; short requests transcribed 3-4x faster | next |
+| **Your words, snippets and History** | A personal dictionary and replacements the speech model listens for, fixes it learns from your corrections, voice snippets, and every dictation kept on your Mac | 0.10 |
+| **Edit any text by voice** | Select text in any app and say "make this more formal", "shorter" or "in Spanish" | 0.10 |
+| **Faster, better speech** | Large v3 Turbo for every language; short requests transcribed 3-4x faster | 0.10 |
 | **Shows its plan and checks its work** | Multi-step requests show their steps in the pill; each action in a window or page is checked and retried another way once; the model is chosen automatically | 0.9 |
 | **"Hey Xpu"** | An optional wake phrase detected on your Mac, so no button is needed | 0.9 |
 | **Every message in 8 languages** | Pill hints, steps, results, errors and spoken questions | 0.9 |
+| **Linux** | Every feature on X11 and Wayland: dictation, the talk button, the shortcut, agents and Control my computer; `.deb`, `.rpm` and AppImage packages | 0.10 |
 
 ## Next (planned)
 
 1. **Signed by Apple, updates itself.** Developer ID signing, notarization and in-app updates: no security warning on install, and Accessibility stays allowed across updates. This is the biggest source of friction today.
-2. **Offline Persian voice.** Persian answers spoken by an on-device voice (macOS has none today, so they are shown, not spoken).
+2. **Linux packages on every release**, tried on GNOME and KDE (X11 and Wayland), Ubuntu and Fedora.
+3. **Offline Persian voice.** Persian answers spoken by an on-device voice (macOS has none today, so they are shown, not spoken).
 
 ## Later (exploring)
 
@@ -31,4 +33,4 @@ The same rules hold for everything below: every app and your files start Off, ri
 - **Choose your model.** Local models (Ollama, Apple on-device) or the cloud, per task, with a fully offline mode.
 - **Teach it by doing.** Show a task once and it saves the routine; run routines on a schedule or when something happens.
 - **Meeting notes.** Live notes from a call, with action items sent to Reminders.
-- **Beyond the Mac.** iPhone and Apple Watch as a remote, and Windows.
+- **Beyond the desktop.** iPhone and Apple Watch as a remote, and Windows.

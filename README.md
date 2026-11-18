@@ -24,14 +24,14 @@ and a spoken summary in your headset when it's done.
 
 ## Download
 
-**[Download Xpu Command for macOS (Apple silicon)](https://github.com/XPU-LAB/xpu-command/releases/latest)**: open the latest release and get the `.dmg` file under *Assets*.
+**[Download Xpu Command for macOS (Apple silicon)](https://github.com/XPU-LAB/xpu-command/releases/latest)**: open the latest release and get the `.dmg` file under *Assets*. On Linux, see [Linux](#linux) below.
 
 | | |
 |---|---|
-| Version | 0.9.2 |
+| Version | 0.10.0 |
 | Requires | macOS 12 or later, a Mac with Apple silicon (M1 or newer) |
-| File | `Xpu-Command-0.9.2-arm64.dmg` (5.5 MB) |
-| SHA-256 | `aadb5611175f572747a0ac428a3d26860f2864e2d2af18da7bbdd14dc64f46ab` |
+| File | `Xpu-Command-0.10.0-arm64.dmg` (5.3 MB) |
+| SHA-256 | `cddcd1cff92838d61fae000d366ea48222b21120452bbbc24298b6ccbbb9a7f4` |
 
 What's new in each version: [CHANGELOG.md](CHANGELOG.md).
 
@@ -50,7 +50,7 @@ This build is not notarized by Apple yet, so macOS asks once. To open it:
 
 You only do this once per version. If you prefer Terminal: `xattr -dr com.apple.quarantine "/Applications/Xpu Command.app"`, then open the app normally.
 
-Agent features need [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://github.com/openai/codex) installed and signed in. To check your download: `shasum -a 256 Xpu-Command-0.9.2-arm64.dmg`.
+Agent features need [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://github.com/openai/codex) installed and signed in. To check your download: `shasum -a 256 Xpu-Command-0.10.0-arm64.dmg`.
 
 ### Linux
 
@@ -162,17 +162,18 @@ export APPLE_TEAM_ID="TEAMID"
 
 ## Status
 
-| | macOS | Windows |
-|---|---|---|
-| Talk button (hook, swallow, ignore injected clicks) | built, unit-tested | built, unit-tested logic; **not yet run on Windows** |
-| Local speech-to-text | verified end to end | needs a Windows build run |
-| Mode A typing | built | built |
-| Overlay never takes focus | **verified**: frontmost app unchanged during a full overlay cycle | `SW_SHOWNOACTIVATE` + `WS_EX_NOACTIVATE`; not yet run |
-| Mode B Claude Code | **verified**: edits a project, shell refused, follow-up resumes the session | not yet run |
-| Mode B Codex | flags and event format **verified on codex-cli 0.167.2** (incl. `exec resume` under the same sandbox); a signed-in run not yet done | |
-| CI | `.github/workflows/ci.yml`: build, tests, clippy, audits on macOS and Windows | |
+| | macOS | Linux | Windows |
+|---|---|---|---|
+| Talk button (hook, swallow, ignore injected clicks) | built, unit-tested | X11 button grab; Wayland evdev + uinput passthrough. Compiled and unit-tested; **not yet run on a Linux desktop** | built, unit-tested logic; **not yet run on Windows** |
+| Local speech-to-text | verified end to end | builds (CPU); not yet run | needs a Windows build run |
+| Dictation typing and editing in place | built | AT-SPI, XTest, wtype/ydotool; not yet run | built (typing only) |
+| Overlay never takes focus | **verified**: frontmost app unchanged during a full overlay cycle | GTK no-focus hints; not yet run | `SW_SHOWNOACTIVATE` + `WS_EX_NOACTIVATE`; not yet run |
+| Control my computer | verified (bench) | same tools over AT-SPI, X11, D-Bus; unit-tested, not yet run | not available |
+| Mode B Claude Code | **verified**: edits a project, shell refused, follow-up resumes the session | shared code; not yet run | not yet run |
+| Mode B Codex | flags and event format **verified on codex-cli 0.167.2** (incl. `exec resume` under the same sandbox); a signed-in run not yet done | | |
+| Tests | 195 pass, clippy clean | 206 pass and clippy clean in a Debian container | |
 
-Next: selected-text and screen context, a first-run setup guide, auto-update, notarized installers.
+Next: a first run on real Linux desktops (GNOME and KDE, X11 and Wayland) and Linux packages on each release, auto-update, notarized installers.
 
 Security: see [SECURITY.md](SECURITY.md).
 
