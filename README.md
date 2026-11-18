@@ -1,5 +1,7 @@
 # Xpu Command
 
+[![M8ven Score](https://m8ven.ai/badge/mcp/xpu-lab-xpu-command-voictc?v=13ec5937051039ddf8d96eba9b430373)](https://m8ven.ai/mcp/xpu-lab-xpu-command-voictc?s=readme)
+
 **Hold a mouse button, talk to your AI coding agent.** A menu-bar app for macOS and Windows: press and hold
 a side button on any mouse, speak, release. Your words are transcribed on your computer and either typed
 where your cursor is, or handed to **Claude Code** or **Codex** to work on your project, with live status
