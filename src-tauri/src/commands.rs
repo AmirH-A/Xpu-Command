@@ -31,6 +31,9 @@ pub fn save_settings(app: AppHandle, ctl: Ctl, new: Settings) -> Result<Settings
     if new.airpods != ctl.settings.read().airpods {
         crate::airpods::apply(&app, new.airpods);
     }
+    if !new.history {
+        crate::history::clear()?;
+    }
     ctl.hook.set_button(new.button);
     ctl.knock.set_sensitivity(new.knock_sensitivity);
     ctl.knock.enabled.store(new.knock, std::sync::atomic::Ordering::Relaxed);
@@ -120,6 +123,8 @@ pub fn crash_pending() -> Option<crate::health::crash::Crash> {
 #[tauri::command]
 pub fn crash_report() -> Result<()> {
     let url = crate::health::crash::report_url().ok_or_else(|| msg("no crash report"))?;
+    #[cfg(target_os = "linux")]
+    crate::linux::open(url.as_ref()).map_err(msg)?;
     let _guard = crate::agents::SPAWN_LOCK.lock().unwrap_or_else(|p| p.into_inner());
     #[cfg(target_os = "macos")]
     std::process::Command::new("/usr/bin/open").arg(&url).spawn().map_err(|e| msg(e.to_string()))?;
@@ -145,14 +150,25 @@ pub async fn diagnostics_zip(ctl: Ctl<'_>) -> Result<String> {
     Ok(zip.display().to_string())
 }
 
+/// The OS the app runs on ("macos", "linux", "windows"), so the window can name things right.
+#[tauri::command]
+pub fn platform() -> &'static str {
+    std::env::consts::OS
+}
+
 #[tauri::command]
 pub fn open_link(which: String) -> Result<()> {
     let url = LINKS.iter().find(|(k, _)| *k == which).map(|(_, u)| *u).ok_or_else(|| msg("unknown link"))?;
-    let _guard = crate::agents::SPAWN_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("/usr/bin/open").arg(url).spawn().map_err(|e| msg(e.to_string()))?;
-    #[cfg(target_os = "windows")]
-    std::process::Command::new("explorer").arg(url).spawn().map_err(|e| msg(e.to_string()))?;
+    #[cfg(target_os = "linux")]
+    crate::linux::open(url.as_ref()).map_err(msg)?;
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _guard = crate::agents::SPAWN_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        #[cfg(target_os = "macos")]
+        std::process::Command::new("/usr/bin/open").arg(url).spawn().map_err(|e| msg(e.to_string()))?;
+        #[cfg(target_os = "windows")]
+        std::process::Command::new("explorer").arg(url).spawn().map_err(|e| msg(e.to_string()))?;
+    }
     Ok(())
 }
 
@@ -264,7 +280,7 @@ pub struct AppRow {
 /// Installed apps for the App access list, with their bundle ids.
 #[tauri::command]
 pub fn app_access_list() -> Vec<AppRow> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         use crate::mac::policy::{class, Class};
         let mut rows: Vec<AppRow> = crate::mac::apps::installed()
@@ -285,7 +301,7 @@ pub fn app_access_list() -> Vec<AppRow> {
         rows.insert(0, AppRow { bundle: crate::mac::policy::FILES.into(), name: "Your files".into(), class: "normal" });
         rows
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     Vec::new()
 }
 
@@ -376,6 +392,35 @@ pub async fn undo_last(ctl: Ctl<'_>) -> Result<String> {
 #[tauri::command]
 pub fn activity_clear() -> Result<()> {
     crate::activity::clear().map_err(Into::into)
+}
+
+/// Your words, replacements, snippets and the fixes noticed for them.
+#[tauri::command]
+pub fn vocab_get() -> crate::vocab::Vocab {
+    crate::vocab::load()
+}
+
+/// Saves your words, replacements and snippets; returns them as kept (trimmed, without duplicates).
+#[tauri::command]
+pub fn vocab_save(vocab: crate::vocab::Vocab) -> Result<crate::vocab::Vocab> {
+    crate::vocab::save(vocab)
+}
+
+/// Adds a noticed fix to your words (`accept`) or dismisses it.
+#[tauri::command]
+pub fn vocab_suggestion(heard: String, accept: bool) -> Result<crate::vocab::Vocab> {
+    crate::vocab::decide(&heard, accept)
+}
+
+/// Dictations, newest first, matching `query` (empty: all).
+#[tauri::command]
+pub fn history_list(query: String) -> Vec<crate::history::Entry> {
+    crate::history::list(&query, 200)
+}
+
+#[tauri::command]
+pub fn history_clear() -> Result<()> {
+    crate::history::clear().map_err(Into::into)
 }
 
 #[tauri::command]

@@ -1,25 +1,33 @@
-//! "Control my Mac": a spoken request becomes actions on this Mac, through a fixed set of tools.
-//! Claude Code plans (no built-in tools, only ours); the app validates, gates by risk, runs and
-//! logs every action.
+//! "Control my Mac" (and, on Linux, "Control my computer"): a spoken request becomes actions on
+//! this computer, through a fixed set of tools. Claude Code plans (no built-in tools, only ours);
+//! the app validates, gates by risk, runs and logs every action.
+//!
+//! Everything but reading windows and running actions is shared. Those two have a macOS version
+//! (Accessibility, AppleScript) and a Linux version (AT-SPI, X11, D-Bus) in `linux/`.
 pub mod apps;
 pub mod consent;
 #[cfg(target_os = "macos")]
 pub mod ax;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg_attr(target_os = "linux", path = "linux/exec.rs")]
 pub mod exec;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod files;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod pipeline;
 pub mod plan;
 pub mod policy;
 pub mod quick;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod runner;
 pub mod server;
 pub mod tools;
 pub mod undo;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg_attr(target_os = "linux", path = "linux/ui.rs")]
 pub mod ui;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg_attr(target_os = "linux", path = "linux/web.rs")]
 pub mod web;
 
 use crate::error::Result;
@@ -44,15 +52,15 @@ pub fn language_name(code: &str) -> &'static str {
 
 pub fn system_prompt(now: chrono::DateTime<chrono::Local>, memory: &str, answer_lang: &str) -> String {
     let base = format!(
-        "You are the Mac assistant of Xpu Command. The user spoke a request aloud and it was transcribed \
+        "You are the {computer} assistant of Xpu Command. The user spoke a request aloud and it was transcribed \
 automatically, so names may be misheard. Carry it out using only the mac tools.\n\
 Rules:\n\
 - Use as few tool calls as possible. Do not guess app or shortcut names you have not seen: when unsure, call list_apps or list_shortcuts first.\n\
 - To work inside an app: open_app (or open_url for a web page), then read_window, then click or type_text using the numbers it shows. Read again after anything changes. Prefer read_window; use screenshot and click_at only when read_window shows too little.\n\
-- For a web page in Safari, Chrome, Arc, Brave, Edge or Vivaldi, use read_page, click_page and fill_page instead. If they say the browser doesn't allow it yet, tell the user the one step to allow it and carry on with read_window and click.\n\
+{web}\n\
 - For files in the home folder: find_files first, then read_file, open_file, move_files, rename_file, trash_files or new_folder with the paths it shows. Never guess paths.\n\
 - After a click that loads something, call wait (with text you expect to see) before reading again.\n\
-- To put text into an app, prefer type_text or fill_page; for long text, copy_text then press_keys cmd+v. Call read_clipboard only when the user refers to what they copied.\n\
+- To put text into an app, prefer type_text or fill_page; for long text, copy_text then press_keys {paste}. Call read_clipboard only when the user refers to what they copied.\n\
 - The request may end with a <screen> block: the app, window, page and selected text in front of the user when they spoke. \"this\", \"it\", \"here\" and \"the selection\" mean that. Use it directly; read the window only for more.\n\
 - The user decides which apps you may see or control. If access is not allowed or a question is declined, stop and say so; never try to get around it.\n\
 - Some actions are shown to the user first: they may be cancelled or need approval. If a tool says it was cancelled or not approved, do not retry; say so.\n\
@@ -68,6 +76,13 @@ The current local time is {} ({}, UTC{}). Give dates to tools as local time, YYY
         now.format("%Z"),
         now.format("%:z"),
         lang = language_name(answer_lang),
+        computer = if cfg!(target_os = "linux") { "computer" } else { "Mac" },
+        web = if cfg!(target_os = "linux") {
+            "- For a web page, use read_window, click and type_text: browsers show their pages to them. (read_page, click_page and fill_page don't exist on Linux.)"
+        } else {
+            "- For a web page in Safari, Chrome, Arc, Brave, Edge or Vivaldi, use read_page, click_page and fill_page instead. If they say the browser doesn't allow it yet, tell the user the one step to allow it and carry on with read_window and click."
+        },
+        paste = if cfg!(target_os = "linux") { "ctrl+v" } else { "cmd+v" },
     );
     let memory_rule = "\nWhen the user asks you to remember something about them, call remember with it in their words; when they ask you to forget something, call forget.\n\
 When the user asks to save what you just did, or a list of actions, as a routine, call save_routine with those actions as steps.";
@@ -220,9 +235,9 @@ pub fn model_label(m: crate::settings::MacModel) -> &'static str {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn not_supported() -> crate::error::Error {
-    crate::error::msg("Control my Mac works on macOS only")
+    crate::error::msg("Control my computer works on macOS and Linux")
 }
 
 #[cfg(test)]

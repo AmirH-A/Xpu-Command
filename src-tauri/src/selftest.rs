@@ -1,5 +1,6 @@
 //! Debug builds only: run the pipeline without the GUI.
-//!   xpu-command --selftest-stt <file.wav> [model]       transcribe a 16-bit PCM WAV with the local engine
+//!   xpu-command --selftest-stt <file.wav> [model]       transcribe a 16-bit PCM WAV with the local engine and time it
+//!                                                       (XPU_LANG, XPU_PROMPT as the app passes them)
 //!   xpu-command --selftest-bench [task-id…]             the benchmark: real tasks end to end, scored (see bench.rs)
 //!   xpu-command --selftest-wake <model> <lang> <file.wav>…  what the wake-phrase check hears in each file
 //!   xpu-command --selftest-agent <claude|codex> <dir> <prompt…>   run an agent headless, print events
@@ -103,14 +104,14 @@ pub fn maybe_run() -> bool {
             }
             true
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         Some("--selftest-mac-tool") => {
                         let v: serde_json::Value = serde_json::from_str(args.get(3).map(String::as_str).unwrap_or("{}")).expect("arguments must be JSON");
             let exec = crate::mac::exec::MacExec::new(Default::default(), crate::mac::workspace().unwrap());
             run_tool(&exec, &args[2], &v);
             true
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         Some("--selftest-context") => {
             let policy = crate::mac::policy::Policy { allow_all: true, ..Default::default() };
             let c = crate::mac::ui::context(&policy);
@@ -132,7 +133,7 @@ pub fn maybe_run() -> bool {
             }
             true
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         Some("--selftest-instant") => {
             let text = args[2..].join(" ");
             let started = std::time::Instant::now();
@@ -149,7 +150,7 @@ pub fn maybe_run() -> bool {
             }
             true
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         Some("--selftest-routine") => {
             let spoken = args[2..].join(" ");
             let Some(r) = crate::routines::match_spoken(&spoken, &crate::routines::list()).cloned() else {
@@ -166,7 +167,7 @@ pub fn maybe_run() -> bool {
             }
             true
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         Some("--selftest-mac") => {
             mac_request(&args[2..].join(" "));
             true
@@ -251,13 +252,24 @@ fn stt_file(path: &str, model: &str) -> crate::error::Result<String> {
     let data = find(b"data").ok_or_else(|| crate::error::msg("no data chunk"))? + 8;
     let samples: Vec<f32> = bytes[data..].chunks_exact(2 * channels).map(|f| i16::from_le_bytes([f[0], f[1]]) as f32 / 32768.0).collect();
     let audio = audio::Captured(audio::resample(&samples, rate, audio::TARGET_RATE));
+    // XPU_LANG (default en) and XPU_PROMPT (words for the model) as the app would pass them.
+    let lang = std::env::var("XPU_LANG").unwrap_or_else(|_| "en".into());
+    let prompt = std::env::var("XPU_PROMPT").unwrap_or_default();
     let engine = stt::LocalEngine::default();
-    let raw = engine.transcribe(model, &stt::Request { audio: &audio, language: "en", vocabulary: "" })?;
+    let t = std::time::Instant::now();
+    engine.preload(model)?;
+    let load_ms = t.elapsed().as_millis();
+    let t = std::time::Instant::now();
+    let raw = engine.transcribe(model, &stt::Request { audio: &audio, language: &lang, vocabulary: &prompt })?;
+    let cold_ms = t.elapsed().as_millis();
+    let t = std::time::Instant::now();
+    engine.transcribe(model, &stt::Request { audio: &audio, language: &lang, vocabulary: &prompt })?;
+    eprintln!("TIMING model={model} audio={:.1}s load={load_ms}ms first={cold_ms}ms warm={}ms", audio.seconds(), t.elapsed().as_millis());
     Ok(sanitize::clean_transcript(&raw))
 }
 
 /// Validates and runs one tool directly (the gate is tested separately; this checks the system side).
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn run_tool(exec: &crate::mac::exec::MacExec, tool: &str, v: &serde_json::Value) {
     use crate::mac::server::{Exec, Output};
     match crate::mac::tools::parse(tool, v, chrono::Local::now().naive_local()) {
@@ -325,7 +337,7 @@ impl crate::mac::server::Host for ConsoleHost {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn mac_request(text: &str) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {

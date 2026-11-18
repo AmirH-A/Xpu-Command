@@ -1,7 +1,10 @@
-//! Installed apps: only `.app` bundles in the standard Applications folders can be opened by name,
-//! so a spoken name can never become an arbitrary path. Matching is forgiving (speech is fuzzy)
+//! Installed apps: only `.app` bundles in the standard Applications folders (macOS) or the desktop's
+//! own app entries (Linux: `.desktop` files in the XDG data folders) can be opened by name, so a
+//! spoken name can never become an arbitrary path. Matching is forgiving (speech is fuzzy)
 //! but never guesses between several candidates.
-use std::path::{Path, PathBuf};
+#[cfg(not(target_os = "linux"))]
+use std::path::Path;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct App {
@@ -9,6 +12,7 @@ pub struct App {
     pub path: PathBuf,
 }
 
+#[cfg(not(target_os = "linux"))]
 const SYSTEM_APPS: &[&str] = &[
     "/System/Library/CoreServices/Finder.app",
     "/System/Library/CoreServices/Applications/Screen Sharing.app",
@@ -16,6 +20,7 @@ const SYSTEM_APPS: &[&str] = &[
     "/System/Library/CoreServices/Applications/About This Mac.app",
 ];
 
+#[cfg(not(target_os = "linux"))]
 fn roots() -> Vec<PathBuf> {
     let mut v: Vec<PathBuf> = ["/Applications", "/Applications/Utilities", "/System/Applications", "/System/Applications/Utilities"].iter().map(PathBuf::from).collect();
     if let Some(h) = dirs::home_dir() {
@@ -25,6 +30,7 @@ fn roots() -> Vec<PathBuf> {
 }
 
 /// All apps in the Applications folders, plus one level of sub-folders (e.g. "/Applications/Adobe X/").
+#[cfg(not(target_os = "linux"))]
 pub fn installed() -> Vec<App> {
     let mut out: Vec<App> = Vec::new();
     for root in roots() {
@@ -44,6 +50,7 @@ pub fn installed() -> Vec<App> {
     out
 }
 
+#[cfg(not(target_os = "linux"))]
 fn scan(dir: &Path, depth: u8, out: &mut Vec<App>) {
     let Ok(rd) = std::fs::read_dir(dir) else { return };
     for e in rd.flatten().take(2000) {
@@ -64,6 +71,16 @@ fn scan(dir: &Path, depth: u8, out: &mut Vec<App>) {
             scan(&p, depth - 1, out);
         }
     }
+}
+
+/// The apps the desktop shows in its menus (not hidden helpers, not terminal programs); `path` is
+/// the app's desktop file.
+#[cfg(target_os = "linux")]
+pub fn installed() -> Vec<App> {
+    let mut out: Vec<App> = crate::linux::desktop::cached().iter().filter(|e| !e.no_display && !e.terminal && !e.name.is_empty()).map(|e| App { name: e.name.clone(), path: e.path.clone() }).collect();
+    out.sort_by_key(|a| a.name.to_lowercase());
+    out.dedup_by(|a, b| a.name.eq_ignore_ascii_case(&b.name));
+    out
 }
 
 fn norm(s: &str) -> String {

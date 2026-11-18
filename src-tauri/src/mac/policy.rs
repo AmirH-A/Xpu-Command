@@ -52,6 +52,27 @@ const EXCLUDED: &[&str] = &[
     "org.keepassxc.keepassxc",
     "com.nordpass.macos.NordPass",
     "com.enpass.Enpass",
+    // Linux (desktop ids): password managers, keyrings and system settings.
+    "org.keepassxc.KeePassXC",
+    "keepassxc",
+    "org.gnome.seahorse.Application",
+    "seahorse",
+    "org.kde.kwalletmanager5",
+    "org.kde.kwalletmanager",
+    "kwalletmanager5",
+    "1password",
+    "bitwarden",
+    "com.bitwarden.desktop",
+    "org.gnome.World.Secrets",
+    "org.gnome.Settings",
+    "gnome-control-center",
+    "org.kde.systemsettings",
+    "systemsettings",
+    "xfce-settings-manager",
+    "polkit-gnome-authentication-agent-1",
+    "org.kde.polkit-kde-authentication-agent-1",
+    "xpu-command",
+    "Xpu Command",
 ];
 
 const TERMINALS: &[&str] = &[
@@ -65,6 +86,32 @@ const TERMINALS: &[&str] = &[
     "com.github.wez.wezterm",
     "com.apple.ScriptEditor2",
     "com.apple.Automator",
+    // Linux (desktop ids).
+    "org.gnome.Terminal",
+    "gnome-terminal",
+    "org.gnome.Console",
+    "org.gnome.Ptyxis",
+    "org.kde.konsole",
+    "konsole",
+    "kitty",
+    "Alacritty",
+    "org.wezfurlong.wezterm",
+    "foot",
+    "footclient",
+    "xterm",
+    "uxterm",
+    "com.gexperts.Tilix",
+    "terminator",
+    "xfce4-terminal",
+    "org.xfce.terminal",
+    "dev.warp.Warp",
+    "org.kde.yakuake",
+    "guake",
+    "tilda",
+    "lxterminal",
+    "mate-terminal",
+    "io.elementary.terminal",
+    "com.raggesilver.BlackBox",
 ];
 
 /// The home folder, gated like an app: "see" finds and reads files, "control" also opens and changes them.
@@ -80,9 +127,11 @@ pub fn class(bundle: &str) -> Class {
     }
 }
 
-/// A bundle id as stored in settings: reverse-DNS characters only.
+/// An app id as stored in settings: a macOS bundle id (reverse DNS) or, on Linux, a desktop file
+/// id (which may be a plain name like "firefox").
 pub fn valid_bundle_id(b: &str) -> bool {
-    (3..=155).contains(&b.len()) && b.contains('.') && b.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+    let dotted = b.contains('.') || cfg!(target_os = "linux");
+    (2..=155).contains(&b.len()) && dotted && b.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
 }
 
 /// A snapshot of the user's settings, taken when a request starts.
@@ -350,7 +399,7 @@ mod tests {
     #[test]
     fn bundle_ids() {
         assert!(valid_bundle_id("com.google.Chrome"));
-        assert!(!valid_bundle_id("chrome"));
+        assert_eq!(valid_bundle_id("chrome"), cfg!(target_os = "linux"), "Linux desktop ids may be plain names");
         assert!(!valid_bundle_id("com.x/../y"));
         assert!(!valid_bundle_id(&"a.".repeat(100)));
     }

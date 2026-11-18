@@ -178,12 +178,14 @@ impl Stats {
     }
 
     #[cfg_attr(not(debug_assertions), allow(dead_code))]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn success(&self) -> f64 {
         if self.count == 0 { 0.0 } else { self.ok as f64 / self.count as f64 }
     }
 
     /// Each target with whether it is met.
     #[cfg_attr(not(debug_assertions), allow(dead_code))]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn verdicts(&self) -> Vec<(String, bool)> {
         vec![
             (format!("success {:.0}% (target {:.0}%)", self.success() * 100.0, TARGET_SUCCESS * 100.0), self.success() >= TARGET_SUCCESS),

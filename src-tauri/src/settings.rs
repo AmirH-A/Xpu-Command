@@ -129,6 +129,8 @@ pub struct Settings {
     pub auto_submit: bool,
     /// Mode A: clean what is typed (fillers, punctuation) in the style of the app it goes into.
     pub polish: bool,
+    /// Keep dictations in History on this Mac (and anything that couldn't be typed).
+    pub history: bool,
     pub max_record_seconds: u32,
     /// Microphone by name; None = system default. Useful to talk into the laptop mic while
     /// listening on Bluetooth headphones (their mic switches them to low-quality call audio).
@@ -178,6 +180,7 @@ impl Default for Settings {
             speak_summary: true,
             auto_submit: false,
             polish: true,
+            history: true,
             max_record_seconds: 120,
             input_device: None,
             claude_profile: None,

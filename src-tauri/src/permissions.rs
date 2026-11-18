@@ -11,10 +11,47 @@ pub struct PermissionStatus {
     pub screen_recording: bool,
     pub microphone: Mic,
     pub needs_move: bool,
+    /// Linux only: the session and what works in it.
+    pub linux: Option<LinuxStatus>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LinuxStatus {
+    /// "x11" or "wayland".
+    pub session: &'static str,
+    pub desktop: String,
+    /// The talk button can be read: always on X11; on Wayland, the mouse devices are readable.
+    pub talk_button: bool,
+    /// The talk button's press can be kept from the app under the pointer (Wayland: /dev/uinput).
+    pub swallow: bool,
+    /// How text is typed by keyboard, if it can be (X11 always; Wayland with wtype or ydotool).
+    pub typing: Option<&'static str>,
+}
+
+#[cfg(target_os = "linux")]
+fn linux_status() -> Option<LinuxStatus> {
+    use crate::linux::Session;
+    let session = crate::linux::session();
+    let readable = |p: &str| std::fs::OpenOptions::new().read(true).open(p).is_ok();
+    let input_ok = std::fs::read_dir("/dev/input").map(|rd| rd.flatten().any(|e| e.file_name().to_string_lossy().starts_with("event") && readable(&e.path().to_string_lossy()))).unwrap_or(false);
+    let uinput = std::fs::OpenOptions::new().write(true).open("/dev/uinput").is_ok();
+    Some(LinuxStatus {
+        session: if session == Session::X11 { "x11" } else { "wayland" },
+        desktop: crate::linux::desktop_name(),
+        talk_button: session == Session::X11 || input_ok,
+        swallow: session == Session::X11 || uinput,
+        typing: crate::linux::keys::can_type().ok(),
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn linux_status() -> Option<LinuxStatus> {
+    None
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 pub enum Mic {
     Allowed,
     NotAsked,
@@ -24,10 +61,11 @@ pub enum Mic {
 pub fn status() -> PermissionStatus {
     let s = PermissionStatus {
         accessibility: accessibility_trusted(false),
-        accessibility_required: cfg!(target_os = "macos"),
+        accessibility_required: cfg!(any(target_os = "macos", target_os = "linux")),
         screen_recording: screen_recording(),
         microphone: microphone(),
         needs_move: running_bundle().is_some_and(|b| needs_move(&b)),
+        linux: linux_status(),
     };
     static LAST: parking_lot::Mutex<Option<String>> = parking_lot::Mutex::new(None);
     let now = format!("{s:?}");
@@ -39,6 +77,7 @@ pub fn status() -> PermissionStatus {
     s
 }
 
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 pub const BUNDLE_ID: &str = "app.xpucommand.desktop";
 
 pub fn running_bundle() -> Option<std::path::PathBuf> {
@@ -162,7 +201,11 @@ extern "C" {
 pub fn screen_recording() -> bool {
     unsafe { CGPreflightScreenCaptureAccess() }
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+pub fn screen_recording() -> bool {
+    true
+}
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn screen_recording() -> bool {
     false
 }
@@ -172,7 +215,11 @@ pub fn screen_recording() -> bool {
 pub fn request_screen_recording() -> bool {
     unsafe { CGRequestScreenCaptureAccess() }
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+pub fn request_screen_recording() -> bool {
+    true
+}
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn request_screen_recording() -> bool {
     false
 }
@@ -193,7 +240,17 @@ pub fn accessibility_trusted(prompt: bool) -> bool {
     unsafe { AXIsProcessTrustedWithOptions(opts.as_concrete_TypeRef()) }
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Linux: the accessibility bus (AT-SPI) answers. Asking (`prompt`) turns accessibility on for
+/// apps, as the desktop's own setting does.
+#[cfg(target_os = "linux")]
+pub fn accessibility_trusted(prompt: bool) -> bool {
+    if prompt {
+        crate::linux::atspi::enable();
+    }
+    crate::linux::atspi::available()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn accessibility_trusted(_prompt: bool) -> bool {
     true
 }
@@ -208,7 +265,12 @@ pub fn secure_input_active() -> bool {
     }
     unsafe { IsSecureEventInputEnabled() }
 }
-#[cfg(not(target_os = "macos"))]
+/// Linux: the field with the keyboard focus is a password field.
+#[cfg(target_os = "linux")]
+pub fn secure_input_active() -> bool {
+    crate::linux::atspi::focused_element().is_some_and(|e| e.is_password())
+}
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn secure_input_active() -> bool {
     false
 }
@@ -228,14 +290,43 @@ pub fn open_settings(which: &str) -> crate::error::Result<()> {
         "microphone" => "ms-settings:privacy-microphone",
         _ => return Err(crate::error::msg("unknown permission")),
     };
-    let _guard = crate::agents::SPAWN_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("/usr/bin/open").arg(target).spawn()?;
-    #[cfg(target_os = "windows")]
-    std::process::Command::new("explorer.exe").arg(target).spawn()?;
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    let _ = which;
-    Ok(())
+    #[cfg(target_os = "linux")]
+    return linux_settings(which);
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _guard = crate::agents::SPAWN_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        #[cfg(target_os = "macos")]
+        std::process::Command::new("/usr/bin/open").arg(target).spawn()?;
+        #[cfg(target_os = "windows")]
+        std::process::Command::new("explorer.exe").arg(target).spawn()?;
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        let _ = which;
+        Ok(())
+    }
+}
+
+/// Linux: turns accessibility on, then opens the desktop's own settings page (GNOME or KDE).
+#[cfg(target_os = "linux")]
+fn linux_settings(which: &str) -> crate::error::Result<()> {
+    use crate::error::msg;
+    if which == "accessibility" {
+        crate::linux::atspi::enable();
+    }
+    let (gnome, kde) = match which {
+        "accessibility" => ("universal-access", "kcm_access"),
+        "microphone" => ("sound", "kcm_pulseaudio"),
+        "screen" | "automation" => return Ok(()),
+        _ => return Err(msg("unknown permission")),
+    };
+    let tool = if crate::linux::is_desktop("kde") {
+        crate::linux::program("systemsettings").map(|p| (p, kde))
+    } else {
+        crate::linux::program("gnome-control-center").map(|p| (p, gnome))
+    };
+    match tool {
+        Some((p, page)) => crate::linux::spawn_detached(&p, &[page.as_ref()], None).map_err(msg),
+        None => Ok(()),
+    }
 }
 
 #[cfg(test)]

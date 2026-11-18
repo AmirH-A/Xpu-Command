@@ -25,8 +25,30 @@ pub fn route(button: Button) -> Event {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn apply(_app: &tauri::AppHandle, _on: bool) {}
+
+/// Linux: the headset's play/pause press arrives as an MPRIS command (see `linux::mpris`).
+#[cfg(target_os = "linux")]
+mod linux {
+    pub fn init(events: std::sync::mpsc::Sender<super::Event>) {
+        crate::linux::mpris::init(events);
+    }
+
+    pub fn apply(_app: &tauri::AppHandle, on: bool) {
+        std::thread::spawn(move || crate::linux::mpris::apply(on));
+    }
+
+    pub fn reclaim_soon(_app: &tauri::AppHandle) {
+        std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_millis(600));
+            crate::linux::mpris::reclaim();
+        });
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub use linux::{apply, init, reclaim_soon};
 
 #[cfg(target_os = "macos")]
 mod mac {

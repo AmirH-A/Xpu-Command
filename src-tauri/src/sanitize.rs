@@ -66,7 +66,9 @@ fn strip_sound_tags(text: &str) -> String {
 
 pub(crate) fn is_dangerous(c: char) -> bool {
     c.is_control()
-        || matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{200B}'..='\u{200F}' | '\u{FEFF}')
+        // Zero-width joiners stay: Persian needs the half-space (U+200C, "می‌روم") and emoji the
+        // joiner (U+200D, "👩‍💻"). Directional overrides and other invisible marks go.
+        || matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{200B}' | '\u{200E}' | '\u{200F}' | '\u{FEFF}')
 }
 
 /// A short, speakable summary of an agent's final message: plain text, first sentences, capped.
@@ -135,7 +137,9 @@ mod tests {
 
     #[test]
     fn bidi_and_zero_width_are_removed() {
-        assert_eq!(clean_transcript("a\u{202E}b\u{200B}c\u{FEFF}"), "abc");
+        assert_eq!(clean_transcript("a\u{202E}b\u{200B}c\u{FEFF}\u{200F}"), "abc");
+        assert_eq!(clean_transcript("می\u{200c}روم"), "می\u{200c}روم", "the Persian half-space stays");
+        assert_eq!(clean_transcript("👩\u{200d}💻"), "👩\u{200d}💻", "so does the emoji joiner");
     }
 
     #[test]

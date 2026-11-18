@@ -38,7 +38,22 @@ fn system_language() -> String {
     langs.iter().map(|l| l.to_string()[..2.min(l.to_string().len())].to_lowercase()).find(|c| LANGS.contains(&c.as_str())).unwrap_or_else(|| "en".into())
 }
 
-#[cfg(not(target_os = "macos"))]
+/// The session's language (LANGUAGE, LC_ALL, LC_MESSAGES, LANG, in that order), else English.
+#[cfg(target_os = "linux")]
+fn system_language() -> String {
+    for var in ["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"] {
+        let Ok(v) = std::env::var(var) else { continue };
+        for part in v.split(':') {
+            let code: String = part.chars().take_while(|c| c.is_ascii_alphabetic()).collect::<String>().to_lowercase();
+            if LANGS.contains(&code.as_str()) {
+                return code;
+            }
+        }
+    }
+    "en".into()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn system_language() -> String {
     "en".into()
 }
@@ -61,12 +76,79 @@ fn fill(template: &str, args: &[(&str, &str)]) -> String {
     out
 }
 
-fn lookup(lang: &str, en: &'static str) -> &'static str {
+fn lookup(lang: &'static str, en: &'static str) -> &'static str {
     static TABLES: OnceLock<HashMap<&'static str, HashMap<&'static str, &'static str>>> = OnceLock::new();
     let tables = TABLES.get_or_init(|| {
         [("fa", FA), ("es", ES), ("de", DE), ("fr", FR), ("ar", AR), ("zh", ZH), ("ja", JA)].into_iter().map(|(l, t)| (l, t.iter().copied().collect())).collect()
     });
-    tables.get(lang).and_then(|t| t.get(en)).copied().unwrap_or(en)
+    let s = tables.get(lang).and_then(|t| t.get(en)).copied().unwrap_or(en);
+    #[cfg(target_os = "linux")]
+    return for_linux(lang, s);
+    #[cfg(not(target_os = "linux"))]
+    s
+}
+
+/// `s` with the computer named as on Linux, made once per message and kept.
+#[cfg(target_os = "linux")]
+fn for_linux(lang: &'static str, s: &'static str) -> &'static str {
+    static CACHE: OnceLock<parking_lot::Mutex<HashMap<(&'static str, &'static str), &'static str>>> = OnceLock::new();
+    let mut c = CACHE.get_or_init(Default::default).lock();
+    c.entry((lang, s)).or_insert_with(|| {
+        let changed = computer_words(lang, s);
+        if changed == s {
+            s
+        } else {
+            Box::leak(changed.into_boxed_str())
+        }
+    })
+}
+
+#[cfg(any(target_os = "linux", test))]
+/// Replaces `word` where it stands as a word of its own (`letter` tells what continues a word);
+/// with `eat_spaces`, one space on each side goes too (Chinese and Japanese put none there).
+fn replace_word(s: &str, word: &str, with: &str, letter: impl Fn(char) -> bool, eat_spaces: bool) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut last = 0;
+    for (i, _) in s.match_indices(word) {
+        if i < last {
+            continue;
+        }
+        let before = s[..i].chars().next_back();
+        let after = s[i + word.len()..].chars().next();
+        if before.is_some_and(&letter) || after.is_some_and(&letter) {
+            continue;
+        }
+        let mut head = &s[last..i];
+        if eat_spaces && head.ends_with(' ') {
+            head = &head[..head.len() - 1];
+        }
+        out.push_str(head);
+        out.push_str(with);
+        last = i + word.len();
+        if eat_spaces && s[last..].starts_with(' ') {
+            last += 1;
+        }
+    }
+    out.push_str(&s[last..]);
+    out
+}
+
+#[cfg(any(target_os = "linux", test))]
+/// The Mac's names in a message, as Linux would say them: "this Mac" → "this computer", in every
+/// language the app speaks (also "System Settings", the menu-bar icon and the keychain in English).
+pub fn computer_words(lang: &str, s: &str) -> String {
+    let latin = |c: char| c.is_alphanumeric();
+    let arabic = |c: char| ('\u{0600}'..='\u{06FF}').contains(&c) || c == '\u{200C}';
+    match lang {
+        "fa" => replace_word(s, "مک", "کامپیوتر", arabic, false),
+        "ar" => s.replace("الماك", "الحاسوب"),
+        "es" => replace_word(s, "Mac", "ordenador", latin, false),
+        "de" => replace_word(s, "Mac", "Computer", latin, false),
+        "fr" => replace_word(&replace_word(&replace_word(s, "ce Mac", "cet ordinateur", latin, false), "le Mac", "l’ordinateur", latin, false), "Mac", "ordinateur", latin, false),
+        "zh" => replace_word(s, "Mac", "电脑", latin, true),
+        "ja" => replace_word(s, "Mac", "パソコン", latin, true),
+        _ => replace_word(&s.replace("System Settings", "Settings").replace("menu-bar icon", "tray icon").replace("Keychain", "keyring").replace("keychain", "keyring"), "Mac", "computer", latin, false),
+    }
 }
 
 type Table = &'static [(&'static str, &'static str)];
@@ -165,6 +247,20 @@ const FA: Table = &[
     ("Say “always” to stop asking, “yes” for now, or press", "بگویید «همیشه» تا دیگر نپرسم، «بله» برای همین بار، یا فشار دهید"),
     ("{question}? Say always, yes, or no.", "{question}؟ بگویید همیشه، بله یا نه."),
     ("{app} is allowed from now on. Change it in Settings › Apps.", "از این به بعد {app} مجاز است. در تنظیمات › برنامه‌ها عوضش کنید."),
+    ("What you said is kept in Settings › History.", "آنچه گفتید در تنظیمات › تاریخچه نگه داشته شده است."),
+    ("That selection is too long to rewrite by voice; select a shorter part", "این انتخاب برای بازنویسی با صدا خیلی طولانی است؛ بخش کوتاه‌تری را انتخاب کنید"),
+    ("The selection changed, so I left it as it is", "متن انتخاب‌شده تغییر کرد، پس دست نزدم"),
+    ("This app doesn't let me replace text with several lines; select one paragraph", "این برنامه اجازه نمی‌دهد متن چندخطی را جایگزین کنم؛ یک پاراگراف را انتخاب کنید"),
+    ("“{word}…” is too long for a word (at most {max} characters)", "«{word}…» برای یک واژه خیلی طولانی است (حداکثر {max} نویسه)"),
+    ("At most {max} words", "حداکثر {max} واژه"),
+    ("A replacement needs words to replace (“{to}”)", "جایگزینی باید واژه‌ای برای جایگزین‌کردن داشته باشد («{to}»)"),
+    ("The replacement for “{from}” is too long", "جایگزینیِ «{from}» خیلی طولانی است"),
+    ("At most {max} replacements", "حداکثر {max} جایگزینی"),
+    ("A snippet’s phrase needs 1 to 6 words (“{phrase}”)", "عبارت میان‌بُر باید ۱ تا ۶ واژه باشد («{phrase}»)"),
+    ("The snippet “{phrase}” needs text, at most {max} characters", "میان‌بُر «{phrase}» به متن نیاز دارد، حداکثر {max} نویسه"),
+    ("Two snippets have the phrase “{phrase}”", "دو میان‌بُر عبارت یکسان «{phrase}» دارند"),
+    ("At most {max} snippets", "حداکثر {max} میان‌بُر"),
+    ("That suggestion is gone", "آن پیشنهاد دیگر وجود ندارد"),
 ];
 
 const ES: Table = &[
@@ -237,6 +333,20 @@ const ES: Table = &[
     ("Say “always” to stop asking, “yes” for now, or press", "Di «siempre» para no volver a preguntar, «sí» para esta vez, o pulsa"),
     ("{question}? Say always, yes, or no.", "¿{question}? Di siempre, sí o no."),
     ("{app} is allowed from now on. Change it in Settings › Apps.", "{app} queda permitido a partir de ahora. Cámbialo en Ajustes › Apps."),
+    ("What you said is kept in Settings › History.", "Lo que dijiste está guardado en Ajustes › Historial."),
+    ("That selection is too long to rewrite by voice; select a shorter part", "La selección es demasiado larga para reescribirla por voz; selecciona una parte más corta"),
+    ("The selection changed, so I left it as it is", "La selección cambió, así que la dejé como estaba"),
+    ("This app doesn't let me replace text with several lines; select one paragraph", "Esta app no me deja reemplazar texto de varias líneas; selecciona un solo párrafo"),
+    ("“{word}…” is too long for a word (at most {max} characters)", "«{word}…» es demasiado larga para una palabra (máximo {max} caracteres)"),
+    ("At most {max} words", "Máximo {max} palabras"),
+    ("A replacement needs words to replace (“{to}”)", "Un reemplazo necesita palabras que reemplazar («{to}»)"),
+    ("The replacement for “{from}” is too long", "El reemplazo de «{from}» es demasiado largo"),
+    ("At most {max} replacements", "Máximo {max} reemplazos"),
+    ("A snippet’s phrase needs 1 to 6 words (“{phrase}”)", "La frase de un atajo necesita de 1 a 6 palabras («{phrase}»)"),
+    ("The snippet “{phrase}” needs text, at most {max} characters", "El atajo «{phrase}» necesita texto, como máximo {max} caracteres"),
+    ("Two snippets have the phrase “{phrase}”", "Dos atajos tienen la frase «{phrase}»"),
+    ("At most {max} snippets", "Máximo {max} atajos"),
+    ("That suggestion is gone", "Esa sugerencia ya no está"),
 ];
 
 const DE: Table = &[
@@ -309,6 +419,20 @@ const DE: Table = &[
     ("Say “always” to stop asking, “yes” for now, or press", "Sag „immer“, damit ich nicht mehr frage, „ja“ für dieses Mal, oder drück"),
     ("{question}? Say always, yes, or no.", "{question}? Sag immer, ja oder nein."),
     ("{app} is allowed from now on. Change it in Settings › Apps.", "{app} ist ab jetzt erlaubt. Ändern unter Einstellungen › Apps."),
+    ("What you said is kept in Settings › History.", "Was du gesagt hast, ist unter Einstellungen › Verlauf gespeichert."),
+    ("That selection is too long to rewrite by voice; select a shorter part", "Die Auswahl ist zu lang, um sie per Sprache umzuschreiben; wähle einen kürzeren Teil"),
+    ("The selection changed, so I left it as it is", "Die Auswahl hat sich geändert, also habe ich sie gelassen"),
+    ("This app doesn't let me replace text with several lines; select one paragraph", "Diese App lässt mich keinen mehrzeiligen Text ersetzen; wähle einen Absatz"),
+    ("“{word}…” is too long for a word (at most {max} characters)", "„{word}…“ ist zu lang für ein Wort (höchstens {max} Zeichen)"),
+    ("At most {max} words", "Höchstens {max} Wörter"),
+    ("A replacement needs words to replace (“{to}”)", "Eine Ersetzung braucht Wörter, die ersetzt werden („{to}“)"),
+    ("The replacement for “{from}” is too long", "Die Ersetzung für „{from}“ ist zu lang"),
+    ("At most {max} replacements", "Höchstens {max} Ersetzungen"),
+    ("A snippet’s phrase needs 1 to 6 words (“{phrase}”)", "Die Phrase eines Textbausteins braucht 1 bis 6 Wörter („{phrase}“)"),
+    ("The snippet “{phrase}” needs text, at most {max} characters", "Der Textbaustein „{phrase}“ braucht Text, höchstens {max} Zeichen"),
+    ("Two snippets have the phrase “{phrase}”", "Zwei Textbausteine haben die Phrase „{phrase}“"),
+    ("At most {max} snippets", "Höchstens {max} Textbausteine"),
+    ("That suggestion is gone", "Dieser Vorschlag ist nicht mehr da"),
 ];
 
 const FR: Table = &[
@@ -381,6 +505,20 @@ const FR: Table = &[
     ("Say “always” to stop asking, “yes” for now, or press", "Dites « toujours » pour ne plus demander, « oui » pour cette fois, ou appuyez"),
     ("{question}? Say always, yes, or no.", "{question} ? Dites toujours, oui ou non."),
     ("{app} is allowed from now on. Change it in Settings › Apps.", "{app} est autorisé désormais. Modifiez-le dans Réglages › Apps."),
+    ("What you said is kept in Settings › History.", "Ce que vous avez dit est conservé dans Réglages › Historique."),
+    ("That selection is too long to rewrite by voice; select a shorter part", "La sélection est trop longue pour être réécrite à la voix ; sélectionnez une partie plus courte"),
+    ("The selection changed, so I left it as it is", "La sélection a changé, je l’ai donc laissée telle quelle"),
+    ("This app doesn't let me replace text with several lines; select one paragraph", "Cette app ne me laisse pas remplacer un texte de plusieurs lignes ; sélectionnez un seul paragraphe"),
+    ("“{word}…” is too long for a word (at most {max} characters)", "« {word}… » est trop long pour un mot ({max} caractères au plus)"),
+    ("At most {max} words", "{max} mots au plus"),
+    ("A replacement needs words to replace (“{to}”)", "Un remplacement a besoin de mots à remplacer (« {to} »)"),
+    ("The replacement for “{from}” is too long", "Le remplacement de « {from} » est trop long"),
+    ("At most {max} replacements", "{max} remplacements au plus"),
+    ("A snippet’s phrase needs 1 to 6 words (“{phrase}”)", "La phrase d’un raccourci doit compter de 1 à 6 mots (« {phrase} »)"),
+    ("The snippet “{phrase}” needs text, at most {max} characters", "Le raccourci « {phrase} » a besoin d’un texte, {max} caractères au plus"),
+    ("Two snippets have the phrase “{phrase}”", "Deux raccourcis ont la phrase « {phrase} »"),
+    ("At most {max} snippets", "{max} raccourcis au plus"),
+    ("That suggestion is gone", "Cette suggestion n’existe plus"),
 ];
 
 const AR: Table = &[
@@ -453,6 +591,20 @@ const AR: Table = &[
     ("Say “always” to stop asking, “yes” for now, or press", "قل «دائمًا» حتى لا أسأل مجددًا، «نعم» لهذه المرة، أو اضغط"),
     ("{question}? Say always, yes, or no.", "{question}؟ قل دائمًا أو نعم أو لا."),
     ("{app} is allowed from now on. Change it in Settings › Apps.", "{app} مسموح من الآن. غيّر ذلك في الإعدادات › التطبيقات."),
+    ("What you said is kept in Settings › History.", "ما قلته محفوظ في الإعدادات › السجل."),
+    ("That selection is too long to rewrite by voice; select a shorter part", "التحديد أطول من أن يُعاد كتابته بالصوت؛ حدّد جزءًا أقصر"),
+    ("The selection changed, so I left it as it is", "تغيّر التحديد، لذا تركته كما هو"),
+    ("This app doesn't let me replace text with several lines; select one paragraph", "هذا التطبيق لا يسمح لي باستبدال نص من عدة أسطر؛ حدّد فقرة واحدة"),
+    ("“{word}…” is too long for a word (at most {max} characters)", "«{word}…» طويلة جدًا لكلمة (بحد أقصى {max} حرفًا)"),
+    ("At most {max} words", "بحد أقصى {max} كلمة"),
+    ("A replacement needs words to replace (“{to}”)", "يحتاج الاستبدال إلى كلمات لاستبدالها («{to}»)"),
+    ("The replacement for “{from}” is too long", "استبدال «{from}» طويل جدًا"),
+    ("At most {max} replacements", "بحد أقصى {max} استبدالًا"),
+    ("A snippet’s phrase needs 1 to 6 words (“{phrase}”)", "تحتاج عبارة الاختصار إلى 1 إلى 6 كلمات («{phrase}»)"),
+    ("The snippet “{phrase}” needs text, at most {max} characters", "يحتاج الاختصار «{phrase}» إلى نص، بحد أقصى {max} حرفًا"),
+    ("Two snippets have the phrase “{phrase}”", "اختصاران لهما العبارة «{phrase}»"),
+    ("At most {max} snippets", "بحد أقصى {max} اختصارًا"),
+    ("That suggestion is gone", "ذلك الاقتراح لم يعد موجودًا"),
 ];
 
 const ZH: Table = &[
@@ -525,6 +677,20 @@ const ZH: Table = &[
     ("Say “always” to stop asking, “yes” for now, or press", "说“总是”以后不再询问，说“是”仅限这次，或按下"),
     ("{question}? Say always, yes, or no.", "{question}？请说总是、是或否。"),
     ("{app} is allowed from now on. Change it in Settings › Apps.", "{app} 从现在起已允许。可在“设置 › 应用”中更改。"),
+    ("What you said is kept in Settings › History.", "你说的内容已保存在 设置 › 历史 中。"),
+    ("That selection is too long to rewrite by voice; select a shorter part", "选中的内容太长，无法用语音改写；请选择较短的部分"),
+    ("The selection changed, so I left it as it is", "选中的内容已变化，所以我没有改动"),
+    ("This app doesn't let me replace text with several lines; select one paragraph", "此应用不允许我替换多行文本；请选择一个段落"),
+    ("“{word}…” is too long for a word (at most {max} characters)", "“{word}…”作为词语太长（最多 {max} 个字符）"),
+    ("At most {max} words", "最多 {max} 个词语"),
+    ("A replacement needs words to replace (“{to}”)", "替换需要有被替换的词语（“{to}”）"),
+    ("The replacement for “{from}” is too long", "“{from}”的替换太长"),
+    ("At most {max} replacements", "最多 {max} 条替换"),
+    ("A snippet’s phrase needs 1 to 6 words (“{phrase}”)", "片段的短语需要 1 到 6 个词（“{phrase}”）"),
+    ("The snippet “{phrase}” needs text, at most {max} characters", "片段“{phrase}”需要文本，最多 {max} 个字符"),
+    ("Two snippets have the phrase “{phrase}”", "有两个片段使用了短语“{phrase}”"),
+    ("At most {max} snippets", "最多 {max} 个片段"),
+    ("That suggestion is gone", "该建议已不存在"),
 ];
 
 const JA: Table = &[
@@ -597,14 +763,42 @@ const JA: Table = &[
     ("Say “always” to stop asking, “yes” for now, or press", "「いつも」で今後は確認しません。「はい」で今回だけ、または押してください"),
     ("{question}? Say always, yes, or no.", "{question}？ いつも、はい、いいえで答えてください。"),
     ("{app} is allowed from now on. Change it in Settings › Apps.", "{app} を今後は許可します。設定 › アプリ で変更できます。"),
+    ("What you said is kept in Settings › History.", "話した内容は 設定 › 履歴 に保存されています。"),
+    ("That selection is too long to rewrite by voice; select a shorter part", "選択範囲が長すぎて音声で書き直せません。短い部分を選択してください"),
+    ("The selection changed, so I left it as it is", "選択範囲が変わったので、そのままにしました"),
+    ("This app doesn't let me replace text with several lines; select one paragraph", "このアプリでは複数行のテキストを置き換えられません。1つの段落を選択してください"),
+    ("“{word}…” is too long for a word (at most {max} characters)", "「{word}…」は単語として長すぎます（最大 {max} 文字）"),
+    ("At most {max} words", "単語は最大 {max} 個まで"),
+    ("A replacement needs words to replace (“{to}”)", "置き換えには置き換える語句が必要です（「{to}」）"),
+    ("The replacement for “{from}” is too long", "「{from}」の置き換えが長すぎます"),
+    ("At most {max} replacements", "置き換えは最大 {max} 個まで"),
+    ("A snippet’s phrase needs 1 to 6 words (“{phrase}”)", "スニペットのフレーズは 1〜6 語にしてください（「{phrase}」）"),
+    ("The snippet “{phrase}” needs text, at most {max} characters", "スニペット「{phrase}」にはテキストが必要です（最大 {max} 文字）"),
+    ("Two snippets have the phrase “{phrase}”", "2つのスニペットが同じフレーズ「{phrase}」を使っています"),
+    ("At most {max} snippets", "スニペットは最大 {max} 個まで"),
+    ("That suggestion is gone", "その提案はもうありません"),
 ];
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[test]
+    fn linux_names_the_computer_in_every_language() {
+        assert_eq!(computer_words("en", "Stays on this Mac. Pause it from the menu-bar icon."), "Stays on this computer. Pause it from the tray icon.");
+        assert_eq!(computer_words("en", "Turned off in System Settings; your Keychain"), "Turned off in Settings; your keyring");
+        assert_eq!(computer_words("en", "macOS and MacBook stay"), "macOS and MacBook stay", "only the word Mac");
+        assert_eq!(computer_words("fa", "روی همین مک می‌ماند. کمک"), "روی همین کامپیوتر می‌ماند. کمک", "not inside کمک");
+        assert_eq!(computer_words("ar", "على هذا الماك"), "على هذا الحاسوب");
+        assert_eq!(computer_words("fr", "Reste sur ce Mac. Contrôler le Mac. votre Mac"), "Reste sur cet ordinateur. Contrôler l’ordinateur. votre ordinateur");
+        assert_eq!(computer_words("de", "Auf diesem Mac"), "Auf diesem Computer");
+        assert_eq!(computer_words("zh", "在这台 Mac 上"), "在这台电脑上");
+        assert_eq!(computer_words("ja", "この Mac で"), "このパソコンで");
+        assert_eq!(computer_words("es", "En este Mac"), "En este ordenador");
+    }
+
     const SOURCES: &[&str] = &[
-        include_str!("controller.rs"), include_str!("health.rs"), include_str!("inject.rs"), include_str!("dictation.rs"), include_str!("wake.rs"),
+        include_str!("controller.rs"), include_str!("health.rs"), include_str!("inject.rs"), include_str!("dictation.rs"), include_str!("wake.rs"), include_str!("vocab.rs"),
         include_str!("mac/tools.rs"), include_str!("mac/server.rs"), include_str!("mac/undo.rs"),
         include_str!("agents/claude.rs"), include_str!("agents/codex.rs"), include_str!("agents/approvals.rs"),
     ];

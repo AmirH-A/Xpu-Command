@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["deb", "rpm", "appimage"],
+    "category": "Utility",
+    "shortDescription": "Hold a mouse button, talk to your computer and your AI coding agent.",
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1", "at-spi2-core", "libspeechd2"],
+        "recommends": ["wl-clipboard", "xclip", "poppler-utils", "unzip", "pipewire-bin", "xdg-utils", "xdg-desktop-portal"],
+        "files": {
+          "/usr/lib/udev/rules.d/70-xpu-command-uinput.rules": "linux/70-xpu-command-uinput.rules"
+        }
+      },
+      "rpm": {
+        "depends": ["webkit2gtk4.1", "gtk3", "libayatana-appindicator-gtk3", "at-spi2-core", "speech-dispatcher-libs"],
+        "recommends": ["wl-clipboard", "xclip", "poppler-utils", "unzip", "xdg-utils", "xdg-desktop-portal"],
+        "files": {
+          "/usr/lib/udev/rules.d/70-xpu-command-uinput.rules": "linux/70-xpu-command-uinput.rules"
+        }
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
+  }
+}

@@ -709,7 +709,7 @@ impl Controller {
             }));
         }
         let s = self.settings.read().clone();
-        let vocabulary = project_vocabulary(s.project_dir.as_deref());
+        let vocabulary = crate::vocab::prompt(&crate::vocab::load(), &project_vocabulary(s.project_dir.as_deref()));
         let ended = Instant::now();
         let text = self.transcribe(&s, audio, vocabulary).await?;
         *self.timing.lock() = Some(Timing { ended, text_ms: ended.elapsed().as_millis() });
@@ -773,8 +773,13 @@ impl Controller {
                 return self.run_routine(app, s, r).await;
             }
         }
+        if s.delivery == Delivery::TypeIntoFocused {
+            return self.dictate(app, s, text).await;
+        }
+        // Requests carry your words too: names and terms spelled your way.
+        let text = crate::vocab::apply(&text, &crate::vocab::load());
         match s.delivery {
-            Delivery::TypeIntoFocused => self.dictate(app, s, text).await?,
+            Delivery::TypeIntoFocused => {}
             Delivery::Agent => self.run_agent(app, s, &text).await?,
             Delivery::ControlMac => {
                 if s.instant && self.try_instant(app, s, &text).await {
@@ -786,33 +791,92 @@ impl Controller {
         Ok(())
     }
 
-    /// Types a dictation into the app in front, polished for that app; or, if it is a spoken edit
-    /// ("make that shorter", "scratch that") of the last dictation there, applies it.
+    /// Types a dictation into the app in front: polished for that app, with your words, and fitted
+    /// to the text around the cursor; a snippet's phrase types its text. A spoken edit rewrites the
+    /// selected text ("make this more formal") or the last dictation ("make that shorter",
+    /// "scratch that"). Everything typed, or that could not be typed, is kept in History.
     async fn dictate(self: &Arc<Self>, app: &AppHandle, s: &Settings, text: String) -> Result<()> {
-        let (pid, bundle) = front_app();
-        let style = bundle.as_deref().map_or(dictation::Style::Prose, dictation::style_for);
+        let (pid, front) = front_app();
+        let style = front.as_ref().map_or(dictation::Style::Prose, |a| dictation::style_for(&a.bundle));
+        let app_name = front.map(|a| a.name).unwrap_or_default();
         let last = self.typed.lock().clone().filter(|t| Some(t.pid) == pid && t.at.elapsed() < EDIT_WINDOW);
-        if let (Some(edit), Some(last)) = (dictation::edit_command(&text), last.clone()) {
-            return self.edit_typed(app, s, last, edit, style).await;
+        if let Some(edit) = dictation::edit_command(&text) {
+            if matches!(edit, dictation::Edit::Rewrite(_)) {
+                if let Some((sel_pid, selected)) = self.on_main(app, || Ok(inject::selection())).await? {
+                    if Some(sel_pid) == pid {
+                        return self.edit_selection(app, s, sel_pid, selected, edit, style).await;
+                    }
+                }
+            }
+            if let Some(last) = last.clone() {
+                return self.edit_typed(app, s, last, edit, style).await;
+            }
         }
-        let shown = if s.polish { dictation::polish(&text, style) } else { text };
+        let vocab = crate::vocab::load();
+        let shown = match crate::vocab::snippet(&text, &vocab) {
+            Some(snippet) => snippet.text.clone(),
+            None => crate::vocab::apply(&if s.polish { dictation::polish(&text, style) } else { text }, &vocab),
+        };
         if shown.is_empty() {
             self.overlay(app, Phase::Hidden, "", None);
             return Ok(());
         }
         self.overlay(app, Phase::Typing, &shown, None);
-        let typed = self.on_main(app, {
-            let (t, submit) = (shown.clone(), s.auto_submit);
-            move || inject::type_after(&t, submit, last.as_ref())
-        })
-        .await?;
+        let typed = self
+            .on_main(app, {
+                let (t, submit) = (shown.clone(), s.auto_submit);
+                move || inject::type_in_place(&t, style, submit, last.as_ref())
+            })
+            .await;
+        let inserted = match typed {
+            Ok(i) => i,
+            Err(e) => {
+                if s.history {
+                    crate::history::record(&app_name, &shown, false);
+                    if !matches!(e, Error::Permission(_)) {
+                        return Err(msg(format!("{e}. {}", tr("What you said is kept in Settings › History."))));
+                    }
+                }
+                return Err(e);
+            }
+        };
+        if s.history {
+            crate::history::record(&app_name, inserted.typed.trim_start(), true);
+        }
+        if let Some((heard, fixed)) = &inserted.fix {
+            crate::vocab::notice_fix(heard, fixed);
+        }
         *self.typed.lock() = match pid {
-            Some(pid) if !s.auto_submit => Some(inject::Typed { text: typed.trim_start().to_string(), pid, at: Instant::now() }),
+            Some(pid) if !s.auto_submit => Some(inject::Typed { text: inserted.typed.trim_start().to_string(), pid, at: Instant::now(), before: inserted.before }),
             _ => None,
         };
         self.record_timing("Typed");
         self.end_trace(true, "Typed");
         self.hide_later(app, Duration::from_millis(700));
+        Ok(())
+    }
+
+    /// Rewrites the selected text as asked, in place.
+    async fn edit_selection(self: &Arc<Self>, app: &AppHandle, s: &Settings, pid: i32, selected: String, edit: dictation::Edit, style: dictation::Style) -> Result<()> {
+        let dictation::Edit::Rewrite(how) = edit else { return Ok(()) };
+        if selected.chars().count() > dictation::MAX_REWRITE {
+            return Err(msg(tr("That selection is too long to rewrite by voice; select a shorter part")));
+        }
+        self.overlay(app, Phase::Working, tr("Rewriting…"), Some(tr("Dictation")));
+        let profile = s.claude_profile.as_deref().map(crate::settings::claude_profile_dir).transpose()?;
+        let out = dictation::rewrite(&selected, &how, profile.as_deref()).await?;
+        let new = if style == dictation::Style::Code || !s.polish || out.contains('\n') { out } else { dictation::polish(&out, style) };
+        let fix = (selected.clone(), new.clone());
+        self.on_main(app, move || inject::replace_selection_with(pid, &fix.0, &fix.1)).await?;
+        crate::activity::record("dictation", "Rewrote the selected text", crate::mac::server::Outcome::Done, "");
+        *self.typed.lock() = Some(inject::Typed { text: new.clone(), pid, at: Instant::now(), before: None });
+        self.record_timing("Edit");
+        if let Some(t) = self.trace.lock().as_mut() {
+            t.route(crate::trace::Route::Edit);
+        }
+        self.end_trace(true, "Rewrote");
+        self.overlay(app, Phase::Done, &new, Some(tr("Dictation")));
+        self.hide_later(app, Duration::from_secs(3));
         Ok(())
     }
 
@@ -829,7 +893,7 @@ impl Controller {
         let fix = (last.clone(), new.clone());
         self.on_main(app, move || inject::replace_typed(&fix.0, &fix.1)).await?;
         crate::activity::record("dictation", if new.is_empty() { "Removed the last dictation" } else { "Rewrote the last dictation" }, crate::mac::server::Outcome::Done, "");
-        *self.typed.lock() = (!new.is_empty()).then(|| inject::Typed { text: new.clone(), pid: last.pid, at: Instant::now() });
+        *self.typed.lock() = (!new.is_empty()).then(|| inject::Typed { text: new.clone(), pid: last.pid, at: Instant::now(), before: last.before.clone() });
         self.record_timing("Edit");
         if let Some(t) = self.trace.lock().as_mut() {
             t.route(crate::trace::Route::Edit);
@@ -986,7 +1050,7 @@ impl Controller {
         Ok(())
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub async fn run_routine(self: &Arc<Self>, app: &AppHandle, s: &Settings, r: crate::routines::Routine) -> Result<()> {
         if self.agent_cancel.lock().is_some() {
             return Err(msg(tr("Still working on the last request; say “stop” to stop it")));
@@ -1014,7 +1078,7 @@ impl Controller {
         Ok(())
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     async fn try_instant(self: &Arc<Self>, app: &AppHandle, s: &Settings, text: &str) -> bool {
         let Some(steps) = crate::mac::quick::parse(text) else { return false };
         if self.agent_cancel.lock().is_some() {
@@ -1065,12 +1129,12 @@ impl Controller {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     async fn try_instant(self: &Arc<Self>, _app: &AppHandle, _s: &Settings, _text: &str) -> bool {
         false
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     pub async fn run_routine(self: &Arc<Self>, _app: &AppHandle, _s: &Settings, _r: crate::routines::Routine) -> Result<()> {
         Err(crate::mac::not_supported())
     }
@@ -1079,7 +1143,7 @@ impl Controller {
         if self.agent_cancel.lock().is_some() {
             return tr("Still working on the last request; say “stop” first").into();
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
             let said = tokio::task::spawn_blocking(crate::mac::exec::undo_last).await.unwrap_or_else(|_| tr("Undo failed").into());
             if said != crate::mac::undo::summary(&[], &[]) {
@@ -1087,14 +1151,14 @@ impl Controller {
             }
             said
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {
             crate::mac::undo::summary(&[], &[])
         }
     }
 
     /// "Control my Mac": start this request's tool server, then Claude Code with only those tools.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     async fn run_mac(self: &Arc<Self>, app: &AppHandle, s: &Settings, text: &str) -> Result<()> {
         if self.agent_cancel.lock().is_some() {
             return Err(msg(tr("Still working on the last request; say “stop” to stop it")));
@@ -1134,7 +1198,7 @@ impl Controller {
         Ok(())
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     async fn run_mac(self: &Arc<Self>, _app: &AppHandle, _s: &Settings, _text: &str) -> Result<()> {
         Err(crate::mac::not_supported())
     }
@@ -1245,15 +1309,21 @@ impl Controller {
     }
 }
 
-/// The app in front (its process and bundle id), where a dictation will be typed.
-#[cfg(target_os = "macos")]
-fn front_app() -> (Option<i32>, Option<String>) {
+/// The app in front (its process, bundle id and name), where a dictation will be typed.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn front_app() -> (Option<i32>, Option<crate::mac::ui::RunningApp>) {
     let pid = crate::mac::ui::front_pid().filter(|p| *p != std::process::id() as i32);
-    (pid, pid.and_then(crate::mac::ui::app_of_pid).map(|a| a.bundle))
+    (pid, pid.and_then(crate::mac::ui::app_of_pid))
 }
 
-#[cfg(not(target_os = "macos"))]
-fn front_app() -> (Option<i32>, Option<String>) {
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+struct NoApp {
+    bundle: String,
+    name: String,
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn front_app() -> (Option<i32>, Option<NoApp>) {
     (None, None)
 }
 

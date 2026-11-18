@@ -19,8 +19,9 @@ pub const CATALOG: &[ModelInfo] = &[
     ModelInfo { id: "tiny.en", file: "ggml-tiny.en.bin", size: 77_704_715, sha256: "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f", label: "Tiny, English (78 MB, fastest)" },
     ModelInfo { id: "base.en", file: "ggml-base.en.bin", size: 147_964_211, sha256: "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002", label: "Base, English (148 MB, recommended)" },
     ModelInfo { id: "base", file: "ggml-base.bin", size: 147_951_465, sha256: "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe", label: "Base, multilingual (148 MB)" },
-    ModelInfo { id: "small.en", file: "ggml-small.en.bin", size: 487_614_201, sha256: "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d", label: "Small, English (488 MB, most accurate)" },
+    ModelInfo { id: "small.en", file: "ggml-small.en.bin", size: 487_614_201, sha256: "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d", label: "Small, English (488 MB)" },
     ModelInfo { id: "small", file: "ggml-small.bin", size: 487_601_967, sha256: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b", label: "Small, multilingual (488 MB)" },
+    ModelInfo { id: "large-v3-turbo-q5_0", file: "ggml-large-v3-turbo-q5_0.bin", size: 574_041_195, sha256: "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2", label: "Large v3 Turbo, multilingual (574 MB, most accurate; best for Persian)" },
 ];
 
 const BASE_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/";

@@ -1,0 +1,4 @@
+# Xpu Command: lets the signed-in user create virtual input devices (/dev/uinput), the same rule
+# game launchers ship for controllers. Used on Wayland to keep the talk button's press from also
+# clicking in the app under the pointer, and to press keys like Return in apps.
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"

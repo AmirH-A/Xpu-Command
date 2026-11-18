@@ -52,6 +52,25 @@ You only do this once per version. If you prefer Terminal: `xattr -dr com.apple.
 
 Agent features need [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://github.com/openai/codex) installed and signed in. To check your download: `shasum -a 256 Xpu-Command-0.9.2-arm64.dmg`.
 
+### Linux
+
+Every feature works on Linux, with the differences below. Build the packages (`.deb`, `.rpm`, AppImage) on Linux with `npm ci && npx tauri build`, after installing the build libraries (Debian/Ubuntu: `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev libspeechd-dev libdbus-1-dev libxkbcommon-dev libxtst-dev libclang-dev cmake pkg-config`).
+
+| | X11 | Wayland |
+|---|---|---|
+| Talk button (mouse) | Works as installed | Add yourself to the `input` group once: `sudo usermod -aG input $USER`, then log out and in. The packages ship a udev rule so the press doesn't also click in the app under the pointer. |
+| Keyboard shortcut | Works | Through the desktop's GlobalShortcuts portal (GNOME 48+, KDE Plasma, Hyprland); the desktop asks you to confirm the keys once. |
+| Dictation typing | Works in every app | GTK, Qt, Firefox and LibreOffice fields through accessibility. Other apps need `wtype` (Sway, Hyprland, KDE) or `ydotoold`. |
+| Control my computer | Reads and operates apps through AT-SPI; pointer clicks, drag and pixel clicks also work. | Reads and operates apps through AT-SPI; no pixel clicks or drag (Wayland doesn't let apps move the pointer), and an app must be in front for key presses. |
+
+- **Accessibility:** Settings turns on the desktop's accessibility switch (the same as "assistive technologies"). Chromium and Electron apps show their contents only when started with `--force-renderer-accessibility`.
+- **Web pages** are read through accessibility (`read_window`, `click`, `type_text`); Linux browsers have no page-scripting bridge, so `read_page` isn't offered.
+- **The Mac's apps, on Linux:** media through MPRIS (Spotify, browsers, any player), volume through PipeWire or PulseAudio, dark mode on GNOME-family and KDE desktops, reminders as notifications Xpu Command keeps and shows on time, events as calendar files your calendar app adds, notes as Markdown in `~/Documents/Notes`, email drafts in your mail app, the Trash by the freedesktop.org spec (undo puts items back), and "Shortcuts" as your own scripts in `~/.config/xpu-command/shortcuts`.
+- **Headset button:** Xpu Command registers as a media player, so a Bluetooth headset's play/pause press starts talking.
+- **Double knock** needs an accelerometer the kernel exposes (convertible laptops and tablets).
+- **Secrets** go to the Secret Service (GNOME Keyring, KWallet). Logs are in `~/.local/state/xpu-command/logs`.
+- Optional helpers: `wl-clipboard` or `xclip` (clipboard tools), `poppler-utils` (reading PDFs), `unzip` (Word and OpenDocument files), `plocate` (faster file search).
+
 ## How it works
 
 ```

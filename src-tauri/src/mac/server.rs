@@ -692,7 +692,7 @@ mod tests {
         assert_eq!(c, 202);
         let (_, v) = post(&s, json!({"jsonrpc":"2.0","id":2,"method":"tools/list"})).await;
         let tools = v["result"]["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 42);
+        assert_eq!(tools.len(), if cfg!(target_os = "linux") { 39 } else { 42 }, "Linux has no page tools");
         assert!(tools.iter().any(|t| t["name"] == "plan"));
         let (_, v) = post(&s, json!({"jsonrpc":"2.0","id":3,"method":"resources/list"})).await;
         assert_eq!(v["error"]["code"], -32601);

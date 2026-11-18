@@ -1,11 +1,14 @@
 //! Double-knock trigger (experimental): two quick taps on the laptop start talking, two more send.
 //! It reads the laptop's built-in accelerometer; nothing else. Only acceleration magnitudes are
-//! looked at, in memory, and only to find two sharp taps. Today: Apple Silicon MacBooks only
-//! (Apple doesn't document this sensor, so a macOS update may break it; the app then says so).
+//! looked at, in memory, and only to find two sharp taps. Apple Silicon MacBooks (Apple doesn't
+//! document this sensor, so a macOS update may break it; the app then says so), and on Linux,
+//! laptops and tablets whose accelerometer the kernel exposes (IIO).
 use crate::settings::KnockSensitivity;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::Sender;
 
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 
@@ -141,7 +144,9 @@ impl KnockConfig {
 pub fn start(cfg: &'static KnockConfig, tx: Sender<Event>) -> crate::error::Result<()> {
     #[cfg(target_os = "macos")]
     return macos::start(cfg, tx);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    return linux::start(cfg, tx);
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = (cfg, tx);
         Err(crate::error::msg("double knock needs a MacBook with Apple silicon"))

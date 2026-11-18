@@ -304,7 +304,7 @@ pub fn schemas() -> Value {
     let local_time = "Local date and time, YYYY-MM-DDTHH:MM";
     let kind = json!({ "type": "string", "enum": ["double", "right", "hover"], "description": "Optional. Default: a normal click." });
     let path_list = json!({ "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": 50, "description": "Paths like ~/Documents/a.pdf, as find_files shows them" });
-    json!([
+    let all = json!([
         s("list_apps", "List the names of the apps installed on this Mac.", json!({}), &[]),
         s("open_app", "Open (or switch to) an installed app by name.", json!({ "name": { "type": "string", "description": "App name, e.g. \"Spotify\"" } }), &["name"]),
         s("quit_app", "Quit a running app. The user sees this first and can cancel it.", json!({ "name": { "type": "string" } }), &["name"]),
@@ -346,7 +346,50 @@ pub fn schemas() -> Value {
         s("forget", "Remove remembered facts that contain these words. Only when the user asks to forget something.", json!({ "text": { "type": "string" } }), &["text"]),
         s("save_routine", "Save a routine the user can run later by saying its name. Only when the user asks. Steps can only be these tools, with the same arguments as when you call them: open_app, quit_app, open_url, web_search, media, play_music, set_volume, dark_mode, run_shortcut. The user sees it first and can cancel it.", json!({ "name": { "type": "string", "description": "What the user will say, e.g. \"start my day\"" }, "steps": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "type": "object", "properties": { "tool": { "type": "string" }, "args": { "type": "object" } }, "required": ["tool", "args"] } } }), &["name", "steps"]),
         s("draft_email", "Open a new email draft in Mail for the user to review and send. It is never sent automatically. Use only email addresses the user said; leave \"to\" empty otherwise.", json!({ "to": { "type": "array", "items": { "type": "string" }, "maxItems": 10 }, "subject": { "type": "string" }, "body": { "type": "string" } }), &["subject", "body"]),
-    ])
+    ]);
+    #[cfg(target_os = "linux")]
+    let all = for_linux(all);
+    all
+}
+
+/// The same tools as Linux has them: no page tools (browsers are read through accessibility),
+/// and descriptions that say where things go on Linux.
+#[cfg(any(target_os = "linux", test))]
+fn for_linux(all: Value) -> Value {
+    const GONE: &[&str] = &["read_page", "click_page", "fill_page"];
+    let says: &[(&str, &str)] = &[
+        ("list_apps", "List the names of the apps installed on this computer."),
+        ("list_shortcuts", "List the user's shortcuts: their own scripts in ~/.config/xpu-command/shortcuts."),
+        ("run_shortcut", "Run one of the user's shortcut scripts by its exact name. The user must approve it first."),
+        ("create_reminder", "Create a reminder: Xpu Command shows it as a notification at the due time (without a time, right away). The user sees it first and can cancel it."),
+        ("create_event", "Create a calendar event: it opens in the user's calendar app, which adds it. The user sees it first and can cancel it."),
+        ("create_note", "Create a note: a Markdown file in ~/Documents/Notes. The user sees it first and can cancel it."),
+        ("press_keys", "Press a key combination in an app (it must be in front), e.g. \"ctrl+l\", \"escape\", \"pagedown\"."),
+        ("choose_menu", "Choose a menu-bar command, e.g. [\"File\", \"Export…\"]. Only for apps with a menu bar; others have a menu button (read_window)."),
+        ("screenshot", "Fallback when read_window shows too little: an image of the app's front window (on Wayland, of the screen). Needs see access."),
+        ("click_at", "Fallback on X11 desktops: click at x, y (pixels) in the app's latest screenshot."),
+        ("drag", "Drag one numbered control from read_window onto another (X11 desktops only; for files use move_files)."),
+        ("copy_text", "Put text on the clipboard (then press_keys ctrl+v in an app to paste it)."),
+        ("find_files", "Find files and folders in the user's home folder by name, newest first, with their paths."),
+        ("draft_email", "Open a new email draft in the user's mail app to review and send. It is never sent automatically. Use only email addresses the user said; leave \"to\" empty otherwise."),
+        ("wait", "Wait until text appears in an app's window (or, without text, until a browser's page has loaded), up to seconds. Use after anything that loads before reading again."),
+    ];
+    let Value::Array(tools) = all else { return all };
+    let tools: Vec<Value> = tools
+        .into_iter()
+        .filter(|t| !GONE.contains(&t["name"].as_str().unwrap_or("")))
+        .map(|mut t| {
+            let name = t["name"].as_str().unwrap_or("").to_string();
+            if let Some((_, d)) = says.iter().find(|(n, _)| *n == name) {
+                t["description"] = json!(d);
+            }
+            if name == "media" || name == "play_music" {
+                t["inputSchema"]["properties"]["player"]["description"] = json!("Optional. Default: Spotify if it is installed, else the music app that is running.");
+            }
+            t
+        })
+        .collect();
+    Value::Array(tools)
 }
 
 
@@ -905,7 +948,7 @@ mod tests {
         let mut all = schemas().as_array().unwrap().clone();
         all.push(crate::mac::plan::schema());
         all.extend(crate::agents::approvals::schema().as_array().unwrap().iter().cloned());
-        assert!(all.len() > 40);
+        assert!(all.len() > if cfg!(target_os = "linux") { 37 } else { 40 });
         for t in &all {
             let a = &t["annotations"];
             for hint in ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"] {
@@ -915,14 +958,25 @@ mod tests {
         }
         let hint = |n: &str, h: &str| all.iter().find(|t| t["name"] == n).unwrap()["annotations"][h] == true;
         assert!(hint("read_file", "readOnlyHint") && hint("trash_files", "destructiveHint") && hint("click", "destructiveHint"));
-        assert!(hint("read_page", "openWorldHint") && !hint("find_files", "openWorldHint"));
+        assert!(annotations("read_page")["openWorldHint"] == true && !hint("find_files", "openWorldHint"));
+    }
+
+    #[test]
+    fn linux_has_no_page_tools_and_says_where_things_go() {
+        let l = for_linux(schemas());
+        let names: Vec<&str> = l.as_array().unwrap().iter().filter_map(|t| t["name"].as_str()).collect();
+        assert!(!names.contains(&"read_page") && !names.contains(&"fill_page") && !names.contains(&"click_page"));
+        assert!(names.contains(&"read_window") && names.contains(&"create_note"));
+        let desc = |n: &str| l.as_array().unwrap().iter().find(|t| t["name"] == n).unwrap()["description"].as_str().unwrap().to_string();
+        assert!(desc("create_note").contains("~/Documents/Notes") && desc("press_keys").contains("ctrl+l"));
+        assert!(!l.to_string().contains("Mail for") && !l.to_string().contains("this Mac"));
     }
 
     #[test]
     fn every_schema_parses_and_names_match() {
         let list = schemas();
         let names: Vec<&str> = list.as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names.len(), 41);
+        assert_eq!(names.len(), if cfg!(target_os = "linux") { 38 } else { 41 }, "Linux has no page tools");
         for n in &names {
             let e = p(n, json!({ "zzz": 1 })).unwrap_err();
             assert!(e.contains("invalid arguments") || e.contains("give a level"), "{n}: {e}");

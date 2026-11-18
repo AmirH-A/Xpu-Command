@@ -135,7 +135,7 @@ fn suggestions(history: &[Seen], routines: &[Routine]) -> Vec<Suggestion> {
         .filter(|(steps, times, days)| *times >= SUGGEST_AFTER && days.len() >= SUGGEST_DAYS && !routines.iter().any(|r| &r.steps == steps))
         .map(|(steps, times, _)| Suggestion { labels: steps.iter().map(label).collect(), steps, times })
         .collect();
-    out.sort_by(|a, b| b.times.cmp(&a.times));
+    out.sort_by_key(|a| std::cmp::Reverse(a.times));
     out.truncate(3);
     out
 }

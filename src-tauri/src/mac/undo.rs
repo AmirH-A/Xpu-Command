@@ -15,6 +15,7 @@ pub enum Step {
     DarkMode { on: bool },
     Media { play: bool, player: Player },
     DeleteReminder { id: String },
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
     DeleteEvent { uid: String, calendar: String },
     DeleteNote { id: String },
     ForgetFact { id: String },

@@ -5,10 +5,12 @@ commands.allow = [
   "get_settings", "save_settings", "set_cloud_key", "clear_cloud_key", "has_cloud_key",
   "permission_status", "open_permission_settings", "model_status", "download_model",
   "pick_project", "agent_status", "input_devices", "claude_profiles", "knock_status", "wake_status", "request_stats",
+  "vocab_get", "vocab_save", "vocab_suggestion", "history_list", "history_clear",
   "activity_recent", "activity_clear", "app_access_list", "request_screen_recording",
   "request_microphone", "move_to_applications", "pick_custom_agent", "open_link",
   "health_check", "crash_pending", "crash_report", "crash_dismiss", "diagnostics_zip",
   "undo_preview", "undo_last",
   "memory_list", "memory_add", "memory_remove", "memory_clear",
-  "routines_list", "routine_suggestions", "routine_save", "routine_dismiss", "routine_remove", "routine_run"
+  "routines_list", "routine_suggestions", "routine_save", "routine_dismiss", "routine_remove", "routine_run",
+  "platform"
 ]

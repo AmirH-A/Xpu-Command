@@ -2,6 +2,25 @@
 
 All notable changes to Xpu Command. Downloads are on the [releases page](https://github.com/XPU-LAB/xpu-command/releases).
 
+## Unreleased
+
+### Added
+- **Linux.** Xpu Command runs on Linux (X11 and Wayland) with every feature: dictation fitted to the text around the cursor and editing by voice through AT-SPI, the talk button (an X11 grab, or the mouse itself on Wayland), the keyboard shortcut (the GlobalShortcuts portal on Wayland), local and cloud speech, agents, and "Control my computer" with the same tools, access settings, approvals and undo. Media, volume, dark mode, reminders, events, notes, email drafts, the Trash and shortcuts use their Linux counterparts. Packages: `.deb`, `.rpm` and AppImage. The window says "computer" instead of "Mac" in all 8 languages.
+- **Your words.** A personal dictionary in Settings: names, products and jargon steer the speech model toward them and are typed with your spelling and capitals; replacements turn what it writes into what you want ("xerox" → "Zerox"). Your words also reach the assistant and agents in requests. In tests, adding "Hooman, XPU Command, Sara" turned "Huuman" into "Hooman" and "Sarah" into "Sara".
+- **It learns your fixes.** When you correct a name or term right after dictating it, the fix is offered in Your words for one click. Nothing is added without you; ordinary words ("their" → "they're") are never suggested.
+- **Snippets.** Say a short phrase on its own ("my email", "my sign-off") and its text is typed.
+- **History.** Every dictation is kept on your Mac, searchable, with a Copy button, including anything that couldn't be typed (a password field, a missing permission), so nothing you say is lost. Turn it off and the file is deleted.
+- **Edit any selected text by voice.** Select text in any app and say "make this more formal", "shorter", "fix the grammar" or "in Spanish". Several paragraphs keep their line breaks.
+- **Large v3 Turbo** speech model (574 MB): far better for Persian, Spanish, accents and names, and now the suggested model when you pick Persian.
+
+### Changed
+- **Dictation fits the text around the cursor.** Inside a sentence it doesn't start with a capital ("…and then" + "we ship"), adds the missing space, and leaves out a final period when the sentence goes on. Code and terminals are typed as said.
+- **Speech to text is 3-4x faster for short requests.** The model reads only as much of its window as you spoke: "Open Slack" went from 1.1 s to 0.3 s with Large v3 Turbo and from 70 ms to 30 ms with Base on an M4, with the same words. Flash attention is on.
+
+### Fixed
+- Whisper repeating itself into the silence after you stop ("Open Slack. Open Slack. Open Slack.", or a sentence written twice) is caught and removed.
+- Persian half-spaces (می‌روم) and emoji joiners are kept instead of stripped.
+
 ## 0.9.2 (2026-11-17)
 
 ### Added

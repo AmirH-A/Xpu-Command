@@ -59,6 +59,20 @@ objc2-media-player = { version = "0.3", default-features = false, features = ["s
 block2 = "0.6"
 whisper-rs = { version = "0.15", features = ["metal", "log_backend"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Secrets in the Secret Service (GNOME Keyring, KWallet); pure-Rust crypto for its session.
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+# D-Bus: AT-SPI (reading and operating other apps), MPRIS, portals, notifications.
+zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
+# X11: the front window, the talk-button grab, synthetic input (XTest) and window screenshots.
+x11rb = { version = "0.13", features = ["xtest", "screensaver"] }
+# Wayland: the talk button from the mouse itself (evdev), and our own virtual keyboard (uinput).
+evdev = "0.13"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+libc = "0.2"
+# The same GTK as Tauri's, to keep the overlay from taking focus.
+gtk = "0.18"
+
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_System_Threading"] }
 

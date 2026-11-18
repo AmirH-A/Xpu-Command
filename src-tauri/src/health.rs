@@ -17,15 +17,42 @@ fn check(id: &'static str, ok: Option<bool>, title: &str, detail: &str, fix: Opt
 
 pub fn run(s: &Settings) -> Vec<Check> {
     let p = crate::permissions::status();
-    let mut out = vec![
-        check("location", Some(!p.needs_move), "Installed in Applications", if p.needs_move { "Running from the download, so macOS can't keep permissions." } else { "Permissions stay after restarts." }, Some("move")),
-        check(
-            "accessibility",
-            Some(!p.accessibility_required || p.accessibility),
-            "Accessibility",
-            if p.accessibility { "The talk button and typing work." } else { "Needed for the talk button and typing." },
-            Some("accessibility"),
-        ),
+    let mut out = Vec::new();
+    match &p.linux {
+        None => {
+            out.push(check("location", Some(!p.needs_move), "Installed in Applications", if p.needs_move { "Running from the download, so macOS can't keep permissions." } else { "Permissions stay after restarts." }, Some("move")));
+            out.push(check(
+                "accessibility",
+                Some(!p.accessibility_required || p.accessibility),
+                "Accessibility",
+                if p.accessibility { "The talk button and typing work." } else { "Needed for the talk button and typing." },
+                Some("accessibility"),
+            ));
+        }
+        Some(l) => {
+            out.push(check(
+                "accessibility",
+                Some(p.accessibility),
+                "Accessibility",
+                if p.accessibility { "Dictation sees the text around the cursor, and the assistant can read apps." } else { "Turn on assistive technologies in your desktop's accessibility settings, then sign in again." },
+                Some("accessibility"),
+            ));
+            let talk = match (l.talk_button, l.swallow) {
+                (false, _) => "On Wayland the talk button is read from the mouse: run sudo usermod -aG input $USER, then log out and in.",
+                (true, true) => "The talk button works.",
+                (true, false) => "The talk button works, but its press also reaches the app under the pointer (allow access to /dev/uinput to stop that).",
+            };
+            out.push(check("talk-button", Some(l.talk_button), "Talk button", talk, Some("input-group")));
+            out.push(check(
+                "typing",
+                if l.typing.is_some() { Some(true) } else { None },
+                "Typing into apps",
+                if l.typing.is_some() { "Dictation can type into any app." } else { "GTK, Qt and Firefox fields are typed into through accessibility. For other apps on Wayland, install wtype (Sway, Hyprland, KDE) or run ydotoold." },
+                None,
+            ));
+        }
+    }
+    out.extend([
         check(
             "microphone",
             Some(p.microphone == crate::permissions::Mic::Allowed),
@@ -37,7 +64,7 @@ pub fn run(s: &Settings) -> Vec<Check> {
             },
             Some("microphone"),
         ),
-    ];
+    ]);
     out.push(match s.stt {
         SttEngine::Local => {
             let ready = crate::stt::model::find(&s.local_model).is_some_and(crate::stt::model::is_downloaded);
@@ -109,8 +136,15 @@ pub fn recovery(error: &str) -> String {
     fix.to_string()
 }
 
+#[cfg(not(target_os = "linux"))]
 pub fn logs_dir() -> Option<PathBuf> {
     Some(dirs::home_dir()?.join("Library/Logs/Xpu Command"))
+}
+
+/// Linux: ~/.local/state/xpu-command/logs (XDG state folder).
+#[cfg(target_os = "linux")]
+pub fn logs_dir() -> Option<PathBuf> {
+    Some(dirs::state_dir().or_else(|| dirs::home_dir().map(|h| h.join(".local/state")))?.join("xpu-command").join("logs"))
 }
 
 pub mod crash {
@@ -213,9 +247,14 @@ pub fn diagnostics_zip(s: &Settings) -> crate::error::Result<PathBuf> {
     });
     std::fs::write(root.join("health.json"), serde_json::to_vec_pretty(&report)?)?;
     let desktop = dirs::desktop_dir().or_else(dirs::home_dir).ok_or_else(|| msg("no Desktop folder"))?;
+    #[cfg(not(target_os = "linux"))]
     let zip = desktop.join(format!("Xpu-Command-diagnostics-{stamp}.zip"));
     #[cfg(target_os = "macos")]
     crate::mac::exec::run_program("/usr/bin/ditto", &["-c".as_ref(), "-k".as_ref(), "--keepParent".as_ref(), root.as_os_str(), zip.as_os_str()], std::time::Duration::from_secs(60)).map_err(msg)?;
+    #[cfg(target_os = "linux")]
+    let zip = desktop.join(format!("Xpu-Command-diagnostics-{stamp}.tar.gz"));
+    #[cfg(target_os = "linux")]
+    crate::linux::run_program(&crate::linux::program("tar").ok_or_else(|| msg("tar isn't installed"))?.to_string_lossy(), &["-czf".as_ref(), zip.as_os_str(), "-C".as_ref(), stage.as_os_str(), root.file_name().unwrap_or_default()], std::time::Duration::from_secs(60)).map_err(msg)?;
     let _ = std::fs::remove_dir_all(&stage);
     Ok(zip)
 }

@@ -37,7 +37,25 @@ pub fn show_without_focus(w: &WebviewWindow) {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+/// Linux (GTK): a window that never takes focus, kept above others and out of the taskbar.
+#[cfg(target_os = "linux")]
+pub fn show_without_focus(w: &WebviewWindow) {
+    use gtk::prelude::*;
+    let w2 = w.clone();
+    let _ = w.run_on_main_thread(move || {
+        if let Ok(g) = w2.gtk_window() {
+            g.set_accept_focus(false);
+            g.set_focus_on_map(false);
+            g.set_keep_above(true);
+            g.set_skip_taskbar_hint(true);
+            g.set_skip_pager_hint(true);
+            g.set_type_hint(gtk::gdk::WindowTypeHint::Notification);
+            g.show_all();
+        }
+    });
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub fn show_without_focus(w: &WebviewWindow) {
     let _ = w.show();
 }

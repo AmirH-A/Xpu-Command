@@ -5,6 +5,8 @@ use crate::settings::TalkButton;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::mpsc::Sender;
 
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "windows")]
@@ -50,13 +52,16 @@ fn code(b: TalkButton) -> u8 {
     }
 }
 
-/// Starts the hook on its own thread. Errors when the OS refuses (macOS without Accessibility).
+/// Starts the hook on its own thread. Errors when the OS refuses (macOS without Accessibility,
+/// Linux on Wayland without access to the mouse).
 pub fn start(cfg: &'static HookConfig, tx: Sender<ButtonEvent>) -> crate::error::Result<()> {
     #[cfg(target_os = "macos")]
     return macos::start(cfg, tx);
     #[cfg(target_os = "windows")]
     return windows::start(cfg, tx);
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(target_os = "linux")]
+    return linux::start(cfg, tx);
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = (cfg, tx);
         Err(crate::error::msg("this platform is not supported yet"))

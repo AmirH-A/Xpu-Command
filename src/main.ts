@@ -1,10 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { t, setLang, resolve, LANGS, lang } from './i18n';
+import { t, setLang, resolve, LANGS, lang, setLinux } from './i18n';
 
 type Settings = {
   button: 'back' | 'forward' | 'middle'; hotkey: 'ctrl_alt_space' | 'alt_shift_space' | 'ctrl_shift_space' | null; mode: 'hold' | 'toggle'; knock: boolean; auto_stop: boolean; sound_cues: boolean; live_words: boolean; instant: boolean; text_size: 'normal' | 'large' | 'larger'; tutorial_done: boolean; ui_language: string; wake_word: boolean; airpods: boolean; knock_sensitivity: 'low' | 'medium' | 'high'; stt: 'local' | 'cloud'; local_model: string; language: string;
-  delivery: 'type_into_focused' | 'agent' | 'control_mac'; agent: 'claude' | 'codex' | 'custom'; custom_agent: string | null; project_dir: string | null; safety: 'read_only' | 'edit' | 'ask_commands'; conversation: boolean; memory: boolean;
+  history: boolean; delivery: 'type_into_focused' | 'agent' | 'control_mac'; agent: 'claude' | 'codex' | 'custom'; custom_agent: string | null; project_dir: string | null; safety: 'read_only' | 'edit' | 'ask_commands'; conversation: boolean; memory: boolean;
   speak_summary: boolean; auto_submit: boolean; polish: boolean; max_record_seconds: number; input_device: string | null; claude_profile: string | null; mac_model: 'auto' | 'haiku' | 'sonnet'; app_access: Record<string, Access>; allow_all_apps: boolean; step_by_step: boolean; share_context: boolean;
 };
 type ModelRow = { id: string; label: string; downloaded: boolean };
@@ -44,7 +44,7 @@ type Access = 'off' | 'see' | 'control' | 'ask';
 type AppRow = { bundle: string; name: string; class: 'normal' | 'terminal' | 'excluded' };
 let appRows: AppRow[] = [];
 
-function bindCheck(key: 'auto_submit' | 'polish' | 'wake_word' | 'speak_summary' | 'knock' | 'allow_all_apps' | 'step_by_step' | 'share_context' | 'auto_stop' | 'sound_cues' | 'conversation' | 'memory' | 'live_words' | 'instant') {
+function bindCheck(key: 'auto_submit' | 'polish' | 'history' | 'wake_word' | 'speak_summary' | 'knock' | 'allow_all_apps' | 'step_by_step' | 'share_context' | 'auto_stop' | 'sound_cues' | 'conversation' | 'memory' | 'live_words' | 'instant') {
   const el = $<HTMLInputElement>(key);
   el.checked = s[key];
   el.onchange = () => { s[key] = el.checked; render(); };
@@ -101,6 +101,8 @@ let page = '';
 
 function showPage(id: string) {
   page = id;
+  if (id === 'history-card') void quietly(refreshHistory);
+  if (id === 'vocab-card') void quietly(refreshVocab);
   document.querySelectorAll<HTMLElement>('main > .page').forEach((p) => p.classList.toggle('shown', p.id === id));
   document.querySelectorAll<HTMLElement>('#pages button').forEach((a) => { const on = a.dataset.page === id; a.classList.toggle('on', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   document.querySelector('main')?.scrollTo(0, 0);
@@ -170,7 +172,13 @@ function renderLessons() {
   $('celebrate').hidden = !allDone;
 }
 
-type Perms = { accessibility: boolean; accessibility_required: boolean; screen_recording: boolean; microphone: 'allowed' | 'not_asked' | 'denied'; needs_move: boolean };
+type LinuxStatus = { session: 'x11' | 'wayland'; desktop: string; talk_button: boolean; swallow: boolean; typing: string | null };
+type Perms = { accessibility: boolean; accessibility_required: boolean; screen_recording: boolean; microphone: 'allowed' | 'not_asked' | 'denied'; needs_move: boolean; linux: LinuxStatus | null };
+const INPUT_GROUP = 'sudo usermod -aG input $USER';
+
+async function copyInputGroupCommand() {
+  try { await navigator.clipboard.writeText(INPUT_GROUP); flash('Copied: paste it in a terminal, then log out and back in.'); } catch (e) { flash(String(e), true); }
+}
 let perms: Perms | null = null;
 let hasKey = false;
 const BUTTON_NAME: Record<Settings['button'], string> = { forward: 'the forward side button', back: 'the back side button', middle: 'the wheel' };
@@ -185,12 +193,23 @@ function renderSetup() {
     label: 'Move and reopen', act: async () => { flash('Moving to Applications…'); await invoke('move_to_applications'); },
   }] : [];
   const sizeMb = Number(model?.label.match(/\((\d+) MB/)?.[1] ?? 0);
-  const all: { done: boolean; title: string; why: string; label: string; act: () => void; download?: boolean }[] = [
-    {
+  const access = p.linux
+    ? [{
+      done: p.accessibility, title: 'Turn on accessibility',
+      why: 'So dictation sees the text around your cursor, and the assistant can read the apps you allow.',
+      label: 'Turn on', act: async () => { await invoke('open_permission_settings', { which: 'accessibility' }); await refreshStatus(); },
+    }, ...(p.linux.talk_button ? [] : [{
+      done: false, title: 'Let Xpu Command read the mouse',
+      why: `${t('On Wayland the talk button is read from the mouse itself. Run this once in a terminal, then log out and back in:')} ${INPUT_GROUP}`,
+      label: 'Copy the command', act: copyInputGroupCommand,
+    }])]
+    : [{
       done: !p.accessibility_required || p.accessibility, title: 'Allow Accessibility',
       why: 'So the talk button works. Already on? Press anyway, then switch it on again.',
       label: 'Open settings', act: () => invoke('open_permission_settings', { which: 'accessibility' }),
-    },
+    }];
+  const all: { done: boolean; title: string; why: string; label: string; act: () => void; download?: boolean }[] = [
+    ...access,
     {
       done: p.microphone === 'allowed', title: 'Allow the microphone', why: p.microphone === 'denied' ? 'It is off. Press Allow, then Allow again when macOS asks.' : 'So Xpu Command can hear you.',
       label: 'Allow',
@@ -406,6 +425,139 @@ async function refreshRoutines() {
   }));
 }
 
+type Vocab = { words: string[]; replacements: { from: string; to: string }[]; snippets: { trigger: string; text: string }[]; suggestions: { heard: string; fixed: string; times: number }[] };
+let vocab: Vocab = { words: [], replacements: [], snippets: [], suggestions: [] };
+
+function removeButton(onclick: () => void, label = t('Remove')): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.className = 'ghost';
+  b.textContent = label;
+  b.onclick = onclick;
+  return b;
+}
+
+async function saveVocab(next: Vocab, done?: string): Promise<boolean> {
+  try {
+    vocab = await invoke<Vocab>('vocab_save', { vocab: next });
+    renderVocab();
+    if (done) flash(done);
+    return true;
+  } catch (e) { flash(String(e), true); return false; }
+}
+
+function pairRow(left: string, right: string, onRemove: () => void): HTMLLIElement {
+  const li = document.createElement('li');
+  const a = document.createElement('span');
+  a.textContent = left;
+  a.title = left;
+  a.dir = 'auto';
+  const arrow = document.createElement('i');
+  arrow.textContent = '→';
+  const b = document.createElement('span');
+  b.textContent = right;
+  b.title = right;
+  b.dir = 'auto';
+  li.append(a, arrow, b, removeButton(onRemove));
+  return li;
+}
+
+function emptyRow(text: string): HTMLLIElement {
+  const li = document.createElement('li');
+  li.className = 'empty';
+  li.textContent = t(text);
+  return li;
+}
+
+function renderVocab() {
+  const words = $('vocab-words');
+  words.dataset.empty = t('No words yet.');
+  words.replaceChildren(...vocab.words.map((w) => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.dir = 'auto';
+    chip.append(w);
+    const x = document.createElement('button');
+    x.textContent = '×';
+    x.setAttribute('aria-label', `${t('Remove')} ${w}`);
+    x.onclick = () => { void saveVocab({ ...vocab, words: vocab.words.filter((v) => v !== w) }); };
+    chip.append(x);
+    return chip;
+  }));
+  const reps = $('vocab-replacements');
+  reps.replaceChildren(...(vocab.replacements.length
+    ? vocab.replacements.map((r) => pairRow(r.from, r.to, () => { void saveVocab({ ...vocab, replacements: vocab.replacements.filter((v) => v !== r) }); }))
+    : [emptyRow('No replacements yet.')]));
+  const snips = $('vocab-snippets');
+  snips.replaceChildren(...(vocab.snippets.length
+    ? vocab.snippets.map((n) => pairRow(`“${n.trigger}”`, n.text, () => { void saveVocab({ ...vocab, snippets: vocab.snippets.filter((v) => v !== n) }); }))
+    : [emptyRow('No snippets yet.')]));
+  $('vocab-count').textContent = vocab.suggestions.length ? String(vocab.suggestions.length) : '';
+  $('vocab-suggestions').replaceChildren(...vocab.suggestions.map((g) => {
+    const box = document.createElement('div');
+    box.className = 'suggestion';
+    const p = document.createElement('p');
+    p.className = 'note';
+    p.dir = 'auto';
+    p.textContent = t('You changed “{heard}” to “{fixed}”. Add it to your words?', { heard: g.heard, fixed: g.fixed });
+    const btns = document.createElement('span');
+    btns.className = 'buttons';
+    const yes = document.createElement('button');
+    yes.textContent = t('Add');
+    const decide = async (accept: boolean) => {
+      try { vocab = await invoke<Vocab>('vocab_suggestion', { heard: g.heard, accept }); renderVocab(); if (accept) flash('Added to your words'); } catch (e) { flash(String(e), true); }
+    };
+    yes.onclick = () => { void decide(true); };
+    const no = removeButton(() => { void decide(false); }, t('Not now'));
+    btns.append(yes, no);
+    box.append(p, btns);
+    return box;
+  }));
+}
+
+async function refreshVocab() {
+  vocab = await invoke<Vocab>('vocab_get');
+  renderVocab();
+}
+
+type HistoryEntry = { at: string; app: string; text: string; typed: boolean };
+
+async function refreshHistory() {
+  const query = $<HTMLInputElement>('history-filter').value;
+  const rows = await invoke<HistoryEntry[]>('history_list', { query });
+  const list = $('history-list');
+  $<HTMLButtonElement>('history-clear').disabled = rows.length === 0 && !query;
+  $('history-count').textContent = query ? t('{n} found', { n: rows.length }) : '';
+  if (!rows.length) {
+    list.replaceChildren(emptyRow(query ? 'Nothing matches.' : s.history ? 'Nothing dictated yet.' : 'History is off.'));
+    return;
+  }
+  list.replaceChildren(...rows.map((r) => {
+    const li = document.createElement('li');
+    const at = document.createElement('time');
+    at.textContent = r.at.slice(5, 16);
+    const body = document.createElement('div');
+    const text = document.createElement('span');
+    text.textContent = r.text;
+    text.title = r.text;
+    text.dir = 'auto';
+    const where = document.createElement('small');
+    if (!r.typed) {
+      where.className = 'lost';
+      where.textContent = r.app ? t('Not typed into {app}', { app: r.app }) : t('Not typed');
+    } else {
+      where.textContent = r.app;
+    }
+    body.append(text, where);
+    const copy = document.createElement('button');
+    copy.textContent = t('Copy');
+    copy.onclick = async () => {
+      try { await navigator.clipboard.writeText(r.text); flash('Copied'); } catch (e) { flash(String(e), true); }
+    };
+    li.append(at, body, copy);
+    return li;
+  }));
+}
+
 async function refreshMemory() {
   const facts = await invoke<Fact[]>('memory_list');
   const list = $('memory-list');
@@ -484,7 +636,7 @@ async function refreshActivity() {
 }
 
 type Check = { id: string; ok: boolean | null; title: string; detail: string; fix: string | null };
-const FIX_LABEL: Record<string, string> = { move: 'Move', accessibility: 'Open settings', microphone: 'Allow', model: 'Show me', 'claude-install': 'How to install', 'claude-login': 'How to sign in' };
+const FIX_LABEL: Record<string, string> = { move: 'Move', accessibility: 'Open settings', microphone: 'Allow', model: 'Show me', 'claude-install': 'How to install', 'claude-login': 'How to sign in', 'input-group': 'Copy the command' };
 
 async function fixIt(fix: string) {
   if (fix === 'move') await invoke('move_to_applications');
@@ -492,6 +644,7 @@ async function fixIt(fix: string) {
   else if (fix === 'microphone') await invoke('request_microphone');
   else if (fix === 'model') showPage('speech-card');
   else if (fix === 'claude-install' || fix === 'claude-login') await invoke('open_link', { which: 'claude-install' });
+  else if (fix === 'input-group') await copyInputGroupCommand();
   await refreshHealth();
 }
 
@@ -604,6 +757,9 @@ async function init() {
   });
   document.querySelectorAll<HTMLElement>('#pages button').forEach((a) => { a.onclick = () => showPage(a.dataset.page!); });
   s = await invoke<Settings>('get_settings');
+  const os = await invoke<string>('platform');
+  setLinux(os === 'linux');
+  document.documentElement.dataset.os = os;
   const ui = $<HTMLSelectElement>('ui_language');
   ui.replaceChildren(new Option(t('System default'), 'system'), ...LANGS.map((l) => new Option(l.name, l.id)));
   ui.value = s.ui_language ?? 'system';
@@ -619,7 +775,7 @@ async function init() {
   lang.onchange = () => {
     s.language = lang.value;
     if (s.language !== 'en' && s.language !== 'auto' && s.local_model.endsWith('.en')) {
-      s.local_model = s.language === 'fa' || s.local_model === 'small.en' ? 'small' : 'base';
+      s.local_model = s.language === 'fa' ? 'large-v3-turbo-q5_0' : s.local_model === 'small.en' ? 'small' : 'base';
       $<HTMLSelectElement>('local_model').value = s.local_model;
       flash('Switched to a multilingual speech model: download it below.');
     }
@@ -634,6 +790,7 @@ async function init() {
   (['button', 'mode', 'knock_sensitivity', 'mac_model', 'local_model', 'agent', 'safety', 'text_size'] as const).forEach(bindSelect);
   bindCheck('auto_submit');
   bindCheck('polish');
+  bindCheck('history');
   bindCheck('wake_word');
   bindCheck('speak_summary');
   bindCheck('knock');
@@ -667,6 +824,40 @@ async function init() {
     if (!confirm('Forget everything in Memory?')) return;
     try { await invoke('memory_clear'); await refreshMemory(); flash('Memory cleared'); } catch (e) { flash(String(e), true); }
   };
+  const addWord = async () => {
+    const input = $<HTMLInputElement>('word-new');
+    const words = input.value.split(',').map((w) => w.trim()).filter(Boolean);
+    if (!words.length) return;
+    if (await saveVocab({ ...vocab, words: [...vocab.words, ...words] })) input.value = '';
+  };
+  $('word-add').onclick = addWord;
+  $<HTMLInputElement>('word-new').onkeydown = (e) => { if (e.key === 'Enter') void addWord(); };
+  const addReplacement = async () => {
+    const from = $<HTMLInputElement>('rep-from'), to = $<HTMLInputElement>('rep-to');
+    if (!from.value.trim() || !to.value.trim()) return;
+    if (await saveVocab({ ...vocab, replacements: [...vocab.replacements, { from: from.value, to: to.value }] })) { from.value = ''; to.value = ''; }
+  };
+  $('rep-add').onclick = addReplacement;
+  $<HTMLInputElement>('rep-to').onkeydown = (e) => { if (e.key === 'Enter') void addReplacement(); };
+  const addSnippet = async () => {
+    const trigger = $<HTMLInputElement>('snip-trigger'), text = $<HTMLInputElement>('snip-text');
+    if (!trigger.value.trim() || !text.value.trim()) return;
+    if (await saveVocab({ ...vocab, snippets: [...vocab.snippets, { trigger: trigger.value, text: text.value }] })) { trigger.value = ''; text.value = ''; }
+  };
+  $('snip-add').onclick = addSnippet;
+  $<HTMLInputElement>('snip-text').onkeydown = (e) => { if (e.key === 'Enter') void addSnippet(); };
+  let historyTimer: number | undefined;
+  $<HTMLInputElement>('history-filter').oninput = () => { window.clearTimeout(historyTimer); historyTimer = window.setTimeout(() => { void quietly(refreshHistory); }, 150); };
+  $('history-clear').onclick = async () => {
+    if (!confirm(t('Delete everything in History?'))) return;
+    try { await invoke('history_clear'); await refreshHistory(); flash('History cleared'); } catch (e) { flash(String(e), true); }
+  };
+  await quietly(refreshVocab);
+  // New dictations and noticed fixes show up while Settings is open.
+  setInterval(() => {
+    if (page === 'history-card') void quietly(refreshHistory);
+    if (!document.hidden) void quietly(async () => { const v = await invoke<Vocab>('vocab_get'); if (v.suggestions.length !== vocab.suggestions.length) { vocab = v; renderVocab(); } });
+  }, 4000);
   const endTutorial = () => { s.tutorial_done = true; render(); showPage('talk-card'); };
   $('tutorial-finish').onclick = endTutorial;
   $('tutorial-skip').onclick = endTutorial;

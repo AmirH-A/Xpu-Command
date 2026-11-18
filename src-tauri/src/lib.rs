@@ -10,9 +10,12 @@ mod cues;
 mod error;
 mod frame;
 mod health;
+mod history;
 mod i18n;
 mod inject;
 mod knock;
+#[cfg(target_os = "linux")]
+mod linux;
 mod mac;
 mod memory;
 mod routines;
@@ -27,6 +30,7 @@ mod speech;
 mod stt;
 mod trace;
 mod vad;
+mod vocab;
 mod wake;
 #[cfg(debug_assertions)]
 mod selftest;
@@ -90,6 +94,11 @@ pub fn run() {
             commands::knock_status,
             commands::wake_status,
             commands::request_stats,
+            commands::vocab_get,
+            commands::vocab_save,
+            commands::vocab_suggestion,
+            commands::history_list,
+            commands::history_clear,
             commands::activity_recent,
             commands::app_access_list,
             commands::request_screen_recording,
@@ -115,6 +124,7 @@ pub fn run() {
             commands::routine_remove,
             commands::routine_run,
             commands::undo_last,
+            commands::platform,
         ])
         .setup(move |app| {
             #[cfg(target_os = "macos")]
@@ -181,7 +191,14 @@ pub fn run() {
                 });
             }
 
-            #[cfg(target_os = "macos")]
+            #[cfg(target_os = "linux")]
+            {
+                // Apps build their accessibility tree only when it is on; follow the focus from now.
+                linux::atspi::enable();
+                linux::atspi::listen();
+                linux::notify::start();
+            }
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             {
                 let (tx, rx) = std::sync::mpsc::channel();
                 airpods::init(tx);
@@ -287,7 +304,7 @@ pub(crate) fn knock_error() -> Option<String> {
 }
 
 fn log_file() -> Option<std::fs::File> {
-    let dir = dirs::home_dir()?.join("Library/Logs/Xpu Command");
+    let dir = health::logs_dir()?;
     std::fs::create_dir_all(&dir).ok()?;
     let path = dir.join("xpu-command.log");
     if std::fs::metadata(&path).is_ok_and(|m| m.len() > 1024 * 1024) {

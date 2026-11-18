@@ -1,5 +1,6 @@
 //! Short sound cues, so the user knows without looking: listening started, sent, cancelled.
-//! Built-in macOS sounds, played quietly by /usr/bin/afplay (no shell, fixed paths).
+//! Built-in macOS sounds, played quietly by /usr/bin/afplay (no shell, fixed paths); on Linux,
+//! short tones made in memory.
 #[derive(Debug, Clone, Copy)]
 pub enum Cue {
     Start,
@@ -30,6 +31,14 @@ pub fn play(cue: Cue) {
             }
         });
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::thread::Builder::new().name("xpu-cue".into()).spawn(move || {
+            if let Err(e) = crate::linux::sound::play(cue) {
+                log::debug!("cue: {e}");
+            }
+        });
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     let _ = cue;
 }
